@@ -47,4 +47,4 @@ integrations = ["javascript_database:1.0.0"]
 [userenv.shared]
 DISCORD_CLIENT_ID = "1472923544315891810"
 DISCORD_CLIENT_SECRET = "X82jMtUsnbzTR4IUMLUDkNIzfGSSS66p"
-NEXTAUTH_URL = "https://asset-manager--hichamadmin.replit.app/"
+NEXTAUTH_URL = "https://asset-manager--hichamadmin.replit.app"

@@ -1,0 +1,49 @@
+Act as a Senior Full Stack Developer. I want to build a web application called "StreamerClipHub".
+The goal is to allow a streamer's community to submit funny or epic YouTube Clips, and for the streamer to view them in a seamless "Queue/Playlist" mode during live streams.
+
+Here are the detailed specifications and business logic:
+
+### 1. Tech Stack (Mandatory):
+- **Framework:** Next.js 14 (App Router).
+- **Styling:** Tailwind CSS (Dark Mode, Gaming/Streamer aesthetic).
+- **Database & Auth:** Supabase (PostgreSQL).
+- **Authentication:** Discord OAuth2 (Strictly Discord login only).
+- **Language:** TypeScript.
+
+### 2. User Roles & Workflows:
+
+#### A. The Viewer (Submitter):
+1. **Login:** Must log in via Discord to prevent spam.
+2. **Submission:**
+   - Input field for YouTube URL.
+   - **CRITICAL VALIDATION:** The system must strictly validate that the URL matches the pattern `youtube.com/clip/` or `youtu.be/clip/`. Reject any other YouTube links (like full videos or Shorts).
+   - **Metadata Fetching:** On paste, use YouTube Data API to fetch: Clip Title, Thumbnail, Duration, and Channel Name.
+   - **Tags:** User selects a tag (e.g., Funny, Skill, Fail, Glitch).
+3. **Spam Prevention:**
+   - Prevent duplicate links.
+   - Limit submissions (e.g., 1 clip per 5 minutes per user).
+
+#### B. The Public (Voting Arena):
+- A "New" and "Top Rated" feed.
+- Users can Upvote/Downvote clips.
+- Clips with high downvotes are auto-hidden.
+
+#### C. The Streamer (Dashboard Mode):
+- **Cinema Mode:** A dedicated page with a large video player.
+- **Queue Logic:**
+   - A sidebar showing the "Pending Clips" queue.
+   - **Auto-Play/Next:** When a clip ends, or when the streamer clicks "Next", the next clip in the queue loads instantly without page refresh.
+- **Action Buttons:** "Mark as Watched" (removes from queue), "Ban User" (for bad links).
+
+### 3. Database Schema (Draft Idea):
+I need you to design the schema for:
+- `users` (discord_id, username, avatar, role).
+- `clips` (url, title, thumbnail_url, submitted_by, status, upvotes, created_at).
+- `votes` (user_id, clip_id, value).
+
+### 4. Your Task Now:
+Please provide the following to get me started:
+1. The **Project Structure** for Next.js.
+2. The **Supabase SQL Schema** code to create the tables.
+3. The **API Route Logic (in TypeScript)** for validating the YouTube Clip URL and fetching metadata.
+4. The **Frontend Component** code for the "Streamer Cinema Mode" that handles the queue playback.

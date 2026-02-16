@@ -1,0 +1,252 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import { api } from "@shared/routes";
+import { z } from "zod";
+import session from "express-session";
+import passport from "passport";
+import { Strategy as DiscordStrategy } from "passport-discord";
+
+export async function registerRoutes(
+  httpServer: Server,
+  app: Express
+): Promise<Server> {
+  // Session setup
+  app.use(
+    session({
+      secret: process.env.SESSION_SECRET || "dev_secret",
+      resave: false,
+      saveUninitialized: false,
+      cookie: {
+        secure: process.env.NODE_ENV === "production",
+      },
+    })
+  );
+
+  app.use(passport.initialize());
+  app.use(passport.session());
+
+  // Setup Passport Discord Strategy if credentials are available
+  if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
+    passport.use(
+      new DiscordStrategy(
+        {
+          clientID: process.env.DISCORD_CLIENT_ID,
+          clientSecret: process.env.DISCORD_CLIENT_SECRET,
+          // Use the exact, lowercase callback URL required by Discord
+          callbackURL: "https://asset-manager--hichamadmin.replit.app/api/auth/callback/discord",
+          scope: ["identify", "email"],
+        },
+        async (accessToken, refreshToken, profile, done) => {
+          try {
+            let user = await storage.getUserByDiscordId(profile.id);
+            
+            if (!user) {
+              user = await storage.createUser({
+                discordId: profile.id,
+                username: profile.username,
+                avatarUrl: profile.avatar 
+                  ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
+                  : `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`,
+                role: "user",
+              } as any);
+            }
+            
+            done(null, user);
+          } catch (error) {
+            done(error);
+          }
+        }
+      )
+    );
+
+    // Discord OAuth routes
+    app.get(
+      "/api/auth/discord",
+      passport.authenticate("discord", { scope: ["identify", "email"] })
+    );
+
+    // Discord will redirect to this exact path, ensure it matches the app settings
+    app.get(
+      "/api/auth/callback/discord",
+      passport.authenticate("discord", { failureRedirect: "/" }),
+      (req, res) => {
+        res.redirect("/");
+      }
+    );
+  } else {
+    // Mock Auth for Development (when Discord credentials are not configured)
+    app.get("/api/auth/discord", async (req, res) => {
+      // Create or get a mock user
+      let user = await storage.getUserByUsername("StreamerDemo");
+      if (!user) {
+        user = await storage.createUser({
+          discordId: "demo-streamer-id",
+          username: "StreamerDemo",
+          avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Streamer",
+          role: "streamer",
+        } as any);
+      }
+      
+      req.login(user, (err) => {
+        if (err) return res.status(500).send("Login failed");
+        return res.redirect("/");
+      });
+    });
+  }
+
+  app.post("/api/auth/mock-login", async (req, res) => {
+    // Create or get a mock user
+    let user = await storage.getUserByUsername("StreamerDemo");
+    if (!user) {
+      user = await storage.createUser({
+        discordId: "mock-discord-id",
+        username: "StreamerDemo",
+        avatarUrl: "https://cdn.discordapp.com/embed/avatars/0.png",
+        role: "streamer",
+      } as any);
+    }
+    
+    req.login(user, (err) => {
+      if (err) return res.status(500).json({ message: "Login failed" });
+      return res.json(user);
+    });
+  });
+
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: number, done) => {
+    const user = await storage.getUser(id);
+    done(null, user);
+  });
+
+  // Auth Routes
+  app.get(api.auth.me.path, (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    res.json(req.user);
+  });
+
+  app.post(api.auth.logout.path, (req, res) => {
+    req.logout((err) => {
+      if (err) return res.status(500).json({ message: "Logout failed" });
+      res.sendStatus(200);
+    });
+  });
+
+  // Clips Routes
+  app.get(api.clips.list.path, async (req, res) => {
+    const { status, sort } = req.query as { status?: string; sort?: string };
+    const clips = await storage.getClips({ status, sort });
+    res.json(clips);
+  });
+
+  app.post(api.clips.create.path, async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Must be logged in to submit clips" });
+    }
+
+    try {
+      const input = api.clips.create.input.parse(req.body);
+      
+      // Fetch metadata (Mocked for now)
+      // TODO: Replace with real YouTube API call
+      const metadata = await mockYouTubeMetadata(input.url);
+
+      const clip = await storage.createClip({
+        ...input,
+        ...metadata,
+        submittedBy: (req.user as any).id,
+        upvotes: 0,
+        downvotes: 0,
+        status: "pending",
+      });
+
+      res.status(201).json(clip);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({
+          message: err.errors[0].message,
+          field: err.errors[0].path.join('.'),
+        });
+      }
+      throw err;
+    }
+  });
+
+  app.patch(api.clips.updateStatus.path, async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    // In real app, check if user is streamer/moderator
+    
+    const { status } = req.body;
+    const clipId = parseInt(req.params.id);
+    const updated = await storage.updateClipStatus(clipId, status);
+    
+    if (!updated) return res.status(404).json({ message: "Clip not found" });
+    res.json(updated);
+  });
+
+  app.post(api.clips.vote.path, async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+
+    const { value } = req.body;
+    const clipId = parseInt(req.params.id);
+    const userId = (req.user as any).id;
+
+    const existingVote = await storage.getVote(userId, clipId);
+
+    if (existingVote) {
+      if (existingVote.value === value) {
+        // Toggle off (remove vote)
+        await storage.deleteVote(existingVote.id);
+      } else {
+        // Change vote
+        await storage.updateVote(existingVote.id, value);
+      }
+    } else {
+      await storage.submitVote({ userId, clipId, value });
+    }
+
+    await storage.updateClipVotes(clipId);
+    
+    // Return new counts
+    const clip = await storage.getClip(clipId);
+    res.json({ upvotes: clip?.upvotes || 0, downvotes: clip?.downvotes || 0 });
+  });
+
+  app.post(api.clips.fetchMetadata.path, async (req, res) => {
+    try {
+      const { url } = req.body;
+      const metadata = await mockYouTubeMetadata(url);
+      res.json(metadata);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid YouTube URL" });
+    }
+  });
+
+  return httpServer;
+}
+
+// Mock Helper
+async function mockYouTubeMetadata(url: string) {
+  // Simulate delay
+  await new Promise(r => setTimeout(r, 500));
+  
+  // Basic Regex to extract ID (very rough)
+  const idMatch = url.match(/clip\/([a-zA-Z0-9_-]+)/);
+  const id = idMatch ? idMatch[1] : "unknown";
+
+  return {
+    title: `Amazing Clip #${id.substring(0, 5)}`,
+    thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, // This might not work for clips directly, but good placeholder
+    channelName: "Random Streamer",
+    duration: "0:30",
+  };
+}

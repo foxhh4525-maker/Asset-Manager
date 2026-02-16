@@ -18,6 +18,9 @@ export async function registerRoutes(
   // Determine whether we are behind a proxy
   const isProd = process.env.NODE_ENV === "production";
   const trustProxy = !!process.env.TRUST_PROXY || isProd;
+  const publicUrl = process.env.NEXTAUTH_URL || process.env.DISCORD_CALLBACK_URL || "";
+  const cookieSecure = isProd || publicUrl.startsWith("https://");
+  const cookieSameSite: any = cookieSecure ? "none" : "lax";
 
   // Configure session with Postgres store
   const store = new PgSession({
@@ -42,8 +45,8 @@ export async function registerRoutes(
       proxy: trustProxy,
       cookie: {
         httpOnly: true,
-        secure: isProd, // secure cookies in production (HTTPS)
-        sameSite: isProd ? "none" : "lax",
+        secure: cookieSecure, // secure cookies when running under HTTPS
+        sameSite: cookieSameSite,
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
     })
@@ -98,19 +101,25 @@ export async function registerRoutes(
       passport.authenticate("discord", { failureRedirect: "/" }),
       (req, res) => {
         // User is now authenticated, ensure session is saved
-        req.session?.save((err) => {
-          if (err) {
-            console.error("Session save error:", err);
-            return res.redirect("/");
-          }
-          
-          // Smart redirect based on user role
-          const user = req.user as any;
-          const redirectPath = user?.role === "streamer" ? "/dashboard" : "/";
-          
-          // Add cache-busting query parameter to force refresh
-          res.redirect(`${redirectPath}?auth=${Date.now()}`);
-        });
+          req.session?.save((err) => {
+            if (err) {
+              console.error("Session save error:", err);
+              return res.redirect("/");
+            }
+
+            // Confirm session persisted (for debugging)
+            try {
+              console.log("Authenticated user id:", (req.user as any)?.id);
+              console.log("Session ID:", (req.session as any)?.id || (req.sessionID as any));
+            } catch (e) {}
+
+            // Smart redirect based on user role
+            const user = req.user as any;
+            const redirectPath = user?.role === "streamer" ? "/dashboard" : "/";
+
+            // Add cache-busting query parameter to force refresh
+            res.redirect(`${redirectPath}?auth=${Date.now()}`);
+          });
       }
     );
   } else {

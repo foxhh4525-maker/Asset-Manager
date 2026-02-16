@@ -10,16 +10,27 @@ import {
   Menu,
   X
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { data: user, isLoading } = useUser();
+  const { data: user, isLoading, refetch } = useUser();
   const logout = useLogout();
   const [location] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Refetch user data when redirected from Discord auth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("auth")) {
+      // User was just authenticated, refetch user data
+      refetch();
+      // Clean up the URL parameter
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [refetch]);
 
   const NavLink = ({ href, icon: Icon, children }: { href: string; icon: any; children: React.ReactNode }) => {
     const isActive = location === href;

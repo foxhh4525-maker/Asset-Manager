@@ -71,10 +71,20 @@ export async function registerRoutes(
       "/api/auth/callback/discord",
       passport.authenticate("discord", { failureRedirect: "/" }),
       (req, res) => {
-        // Smart redirect based on user role
-        const user = req.user as any;
-        const redirectPath = user?.role === "streamer" ? "/dashboard" : "/";
-        res.redirect(redirectPath);
+        // User is now authenticated, ensure session is saved
+        req.session?.save((err) => {
+          if (err) {
+            console.error("Session save error:", err);
+            return res.redirect("/");
+          }
+          
+          // Smart redirect based on user role
+          const user = req.user as any;
+          const redirectPath = user?.role === "streamer" ? "/dashboard" : "/";
+          
+          // Add cache-busting query parameter to force refresh
+          res.redirect(`${redirectPath}?auth=${Date.now()}`);
+        });
       }
     );
   } else {

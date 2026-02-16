@@ -34,24 +34,14 @@ export function useLogout() {
   });
 }
 
-// Mock login for demo purposes (actual implementation uses backend OAuth redirect)
+// Discord OAuth login
 export function useLogin() {
   const { toast } = useToast();
   
   const login = () => {
-    // In a real app, this redirects to Discord OAuth
-    // window.location.href = "/api/auth/discord";
-    
-    // For demo visual feedback:
-    toast({
-      title: "Redirecting to Discord...",
-      description: "Please check the backend console for the auth link if running locally.",
-    });
-    
-    // Simulate redirect delay
-    setTimeout(() => {
-        window.location.href = "/login"; // Or wherever the backend auth starts
-    }, 1000);
+    // Redirect to Discord OAuth endpoint
+    // The backend will handle authentication and redirect back
+    window.location.href = "/api/auth/discord";
   };
 
   return { login };

@@ -46,7 +46,18 @@ export class DatabaseStorage implements IStorage {
 
   async getClips(filters?: { status?: string; sort?: string }): Promise<(Clip & { submitter: { username: string; avatarUrl: string | null } })[]> {
     let query = db.select({
-      ...clips,
+      id: clips.id,
+      url: clips.url,
+      title: clips.title,
+      thumbnailUrl: clips.thumbnailUrl,
+      channelName: clips.channelName,
+      duration: clips.duration,
+      tag: clips.tag,
+      submittedBy: clips.submittedBy,
+      status: clips.status,
+      upvotes: clips.upvotes,
+      downvotes: clips.downvotes,
+      createdAt: clips.createdAt,
       submitter: {
         username: users.username,
         avatarUrl: users.avatarUrl,

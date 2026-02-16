@@ -55,17 +55,12 @@ export default function Dashboard() {
           <div className="relative flex-1 bg-black rounded-xl overflow-hidden shadow-2xl border border-white/5 group">
             {currentClip ? (
               <ReactPlayer
-                url={currentClip.url}
+                {...{ url: currentClip.url } as any}
                 width="100%"
                 height="100%"
                 playing={isPlaying}
                 controls
                 onEnded={() => setIsPlaying(false)}
-                config={{
-                  youtube: {
-                    playerVars: { showinfo: 1 }
-                  }
-                }}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">

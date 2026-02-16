@@ -83,12 +83,12 @@ export default function Home() {
         <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black border-border/50">
           <div className="aspect-video w-full">
             {selectedClip && (
-              <ReactPlayer
-                url={selectedClip.url}
-                width="100%"
-                height="100%"
-                playing
-                controls
+              <ReactPlayer 
+                {...{ url: selectedClip.url } as any}
+                playing 
+                controls 
+                width="100%" 
+                height="100%" 
               />
             )}
           </div>

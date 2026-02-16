@@ -70,10 +70,6 @@ export const votesRelations = relations(votes, ({ one }) => ({
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertClipSchema = createInsertSchema(clips).omit({ 
   id: true, 
-  submittedBy: true, 
-  status: true, 
-  upvotes: true, 
-  downvotes: true, 
   createdAt: true 
 });
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true });

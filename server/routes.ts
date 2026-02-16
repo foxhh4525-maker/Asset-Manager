@@ -4,6 +4,8 @@ import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
+import { pool } from "./db";
 import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
 
@@ -11,14 +13,38 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Session setup
+  // Session setup - use Postgres-backed session store for persistence
+    const PgSession = connectPgSimple(session as any);
+  // Determine whether we are behind a proxy
+  const isProd = process.env.NODE_ENV === "production";
+  const trustProxy = !!process.env.TRUST_PROXY || isProd;
+
+  // Configure session with Postgres store
+  const store = new PgSession({
+    pool,
+    tableName: "session",
+    // create table automatically if missing (safe to run repeatedly)
+    createTableIfMissing: true,
+  });
+
+  // Log store errors for troubleshooting
+  store.on && store.on("error", (err: any) => {
+    console.error("Session store error:", err);
+  });
+
   app.use(
     session({
+      store,
+      name: process.env.SESSION_COOKIE_NAME || "connect.sid",
       secret: process.env.SESSION_SECRET || "dev_secret",
       resave: false,
       saveUninitialized: false,
+      proxy: trustProxy,
       cookie: {
-        secure: process.env.NODE_ENV === "production",
+        httpOnly: true,
+        secure: isProd, // secure cookies in production (HTTPS)
+        sameSite: isProd ? "none" : "lax",
+        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
     })
   );

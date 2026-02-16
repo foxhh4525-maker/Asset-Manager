@@ -57,6 +57,11 @@ export default function SubmitPage() {
   };
 
   const onSubmit = async (data: any) => {
+    if (!user) {
+      login();
+      return;
+    }
+    
     if (!metadata) return;
     
     await createClip.mutateAsync({
@@ -92,6 +97,28 @@ export default function SubmitPage() {
 
           <Card className="glass-panel border-border/50">
             <CardContent className="p-8">
+              {userLoading && (
+                <div className="flex items-center justify-center py-8 text-muted-foreground animate-pulse">
+                  <Loader2 className="w-5 h-5 ml-2 animate-spin" /> جاري التحقق من تسجيل الدخول...
+                </div>
+              )}
+              
+              {!userLoading && !user && (
+                <Alert variant="destructive" className="mb-6">
+                  <Lock className="h-4 w-4" />
+                  <AlertDescription>
+                    يجب أن تكون مسجل دخول لإرسال مقطع. 
+                    <Button 
+                      variant="link" 
+                      className="ml-2 p-0 h-auto text-destructive hover:text-destructive/90"
+                      onClick={login}
+                    >
+                      سجل الدخول الآن
+                    </Button>
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 
                 {/* URL Input */}
@@ -148,11 +175,15 @@ export default function SubmitPage() {
                 <div className="space-y-2">
                   <Label htmlFor="tag">فئة المقطع</Label>
                   <Select 
-                    onValueChange={(val) => form.setValue("tag", val)}
-                    defaultValue={form.getValues("tag")}
-                  >
-                    <SelectTrigger className="bg-background/50 h-12">
-                      <SelectValue placeholder="اختر فئة" />
+                    onValueChange={(val) => form.setValue("ta || !user || userLoading}
+                >
+                  {createClip.isPending ? (
+                    <>
+                      <Loader2 className="w-5 h-5 ml-2 animate-spin" /> جاري الإرسال...
+                    </>
+                  ) : !user ? (
+                    <>
+                      <Lock className="w-5 h-5 ml-2" /> سجل الدخول لإرسال
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Funny">مضحك / فشل</SelectItem>

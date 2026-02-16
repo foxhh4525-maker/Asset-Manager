@@ -1,9 +1,30 @@
-import { db } from "./db";
+import { db, pool } from "./db";
 import { users, clips } from "@shared/schema";
 import { storage } from "./storage";
 
 async function seed() {
   console.log("Seeding database...");
+
+  // Ensure the Postgres enum `user_role` contains the 'user' value
+  // This is safe to run repeatedly.
+  const client = await pool.connect();
+  try {
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_type t
+          JOIN pg_enum e ON t.oid = e.enumtypid
+          WHERE t.typname = 'user_role' AND e.enumlabel = 'user'
+        ) THEN
+          EXECUTE 'ALTER TYPE user_role ADD VALUE ''user''';
+        END IF;
+      END
+      $$;
+    `);
+  } finally {
+    client.release();
+  }
 
   // Check if users exist
   const existingUser = await storage.getUserByUsername("StreamerDemo");

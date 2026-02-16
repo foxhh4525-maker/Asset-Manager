@@ -3,7 +3,7 @@ import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const userRoleEnum = pgEnum("user_role", ["viewer", "streamer", "moderator"]);
+export const userRoleEnum = pgEnum("user_role", ["viewer", "user", "streamer", "moderator"]);
 export const clipStatusEnum = pgEnum("clip_status", ["pending", "approved", "rejected", "watched"]);
 
 export const users = pgTable("users", {

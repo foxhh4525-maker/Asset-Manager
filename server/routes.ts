@@ -27,7 +27,8 @@ export async function registerRoutes(
     pool,
     tableName: "session",
     // create table automatically if missing (safe to run repeatedly)
-    createTableIfMissing: true,
+    // disable automatic creation at runtime; create via migrations instead
+    createTableIfMissing: false,
   });
 
   // Log store errors for troubleshooting

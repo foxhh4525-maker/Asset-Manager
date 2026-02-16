@@ -132,4 +132,97 @@ export class DatabaseStorage implements IStorage {
   }
 }
 
-export const storage = new DatabaseStorage();
+class InMemoryStorage implements IStorage {
+  private users: any[] = [];
+  private clips: any[] = [];
+  private votes: any[] = [];
+  private userId = 1;
+  private clipId = 1;
+  private voteId = 1;
+
+  async getUser(id: number) {
+    return this.users.find(u => u.id === id);
+  }
+
+  async getUserByDiscordId(discordId: string) {
+    return this.users.find(u => u.discordId === discordId);
+  }
+
+  async getUserByUsername(username: string) {
+    return this.users.find(u => u.username === username);
+  }
+
+  async createUser(user: InsertUser) {
+    const newUser = { id: this.userId++, ...user } as any;
+    this.users.push(newUser);
+    return newUser as User;
+  }
+
+  async getClips(filters?: { status?: string; sort?: string }) {
+    let list = this.clips.slice();
+    if (filters?.status) {
+      list = list.filter(c => c.status === filters.status);
+    }
+    if (filters?.sort === 'top') {
+      list.sort((a, b) => (b.upvotes || 0) - (a.upvotes || 0));
+    } else {
+      list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    }
+    return list.map(c => ({
+      ...c,
+      submitter: { username: c.submitter?.username || 'unknown', avatarUrl: c.submitter?.avatarUrl || null },
+    }));
+  }
+
+  async getClip(id: number) {
+    return this.clips.find(c => c.id === id);
+  }
+
+  async createClip(clip: InsertClip) {
+    const newClip = { id: this.clipId++, createdAt: Date.now(), upvotes: 0, downvotes: 0, ...clip } as any;
+    // attach submitter info if present
+    if (newClip.submittedBy) {
+      const user = this.users.find(u => u.id === newClip.submittedBy);
+      newClip.submitter = { username: user?.username || 'unknown', avatarUrl: user?.avatarUrl || null };
+    }
+    this.clips.push(newClip);
+    return newClip as Clip;
+  }
+
+  async updateClipStatus(id: number, status: string) {
+    const clip = this.clips.find(c => c.id === id);
+    if (!clip) return undefined;
+    clip.status = status;
+    return clip as Clip;
+  }
+
+  async getVote(userId: number, clipId: number) {
+    return this.votes.find(v => v.userId === userId && v.clipId === clipId);
+  }
+
+  async submitVote(vote: InsertVote) {
+    const newVote = { id: this.voteId++, ...vote } as any;
+    this.votes.push(newVote);
+  }
+
+  async updateVote(id: number, value: number) {
+    const v = this.votes.find(x => x.id === id);
+    if (v) v.value = value;
+  }
+
+  async deleteVote(id: number) {
+    this.votes = this.votes.filter(v => v.id !== id);
+  }
+
+  async updateClipVotes(clipId: number) {
+    const up = this.votes.filter(v => v.clipId === clipId && v.value === 1).length;
+    const down = this.votes.filter(v => v.clipId === clipId && v.value === -1).length;
+    const clip = this.clips.find(c => c.id === clipId);
+    if (clip) {
+      clip.upvotes = up;
+      clip.downvotes = down;
+    }
+  }
+}
+
+export const storage = (db ? new DatabaseStorage() : new InMemoryStorage());

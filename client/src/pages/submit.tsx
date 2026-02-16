@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
-import { Loader2, ArrowLeft, Youtube, CheckCircle2, Film } from "lucide-react";
+import { Loader2, ArrowLeft, Youtube, CheckCircle2, Film, AlertCircle, Lock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,8 +16,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardDescription } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useCreateClip, useClipMetadata } from "@/hooks/use-clips";
+import { useUser, useLogin } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
 
 const submitSchema = z.object({
@@ -30,6 +32,8 @@ export default function SubmitPage() {
   const [metadata, setMetadata] = useState<any>(null);
   const createClip = useCreateClip();
   const fetchMetadata = useClipMetadata();
+  const { data: user, isLoading: userLoading } = useUser();
+  const { login } = useLogin();
   
   const form = useForm({
     resolver: zodResolver(submitSchema),

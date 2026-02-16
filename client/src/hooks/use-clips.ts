@@ -27,6 +27,7 @@ export function useCreateClip() {
     mutationFn: async (data: { url: string; title: string; thumbnailUrl: string; channelName: string; duration: string; tag: string }) => {
       const res = await fetch(api.clips.create.path, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
@@ -64,6 +65,7 @@ export function useUpdateClipStatus() {
       const url = buildUrl(api.clips.updateStatus.path, { id });
       const res = await fetch(url, {
         method: "PATCH",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
@@ -89,6 +91,7 @@ export function useVoteClip() {
       const url = buildUrl(api.clips.vote.path, { id });
       const res = await fetch(url, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value }),
       });

@@ -72,10 +72,10 @@ export function ClipCard({ clip, onPlay }: ClipCardProps) {
             <AvatarImage src={clip.submitter?.avatarUrl} />
             <AvatarFallback><User className="w-3 h-3" /></AvatarFallback>
           </Avatar>
-          <span className="truncate max-w-[120px]">{clip.submitter?.username || 'Anonymous'}</span>
+          <span className="truncate max-w-[120px]">{clip.submitter?.username || 'مجهول'}</span>
           <span className="mx-1">•</span>
           <Clock className="w-3 h-3" />
-          <span>{clip.createdAt ? formatDistanceToNow(new Date(clip.createdAt), { addSuffix: true }) : 'Just now'}</span>
+          <span>{clip.createdAt ? formatDistanceToNow(new Date(clip.createdAt), { addSuffix: true }) : 'للتو'}</span>
         </div>
 
         <div className="pt-2 flex items-center justify-between border-t border-border/50 mt-2">

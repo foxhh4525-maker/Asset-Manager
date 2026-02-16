@@ -54,9 +54,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-2">
-            <NavLink href="/" icon={Gamepad2}>Feed</NavLink>
+            <NavLink href="/" icon={Gamepad2}>الرسوم</NavLink>
             {user?.role === "streamer" && (
-              <NavLink href="/dashboard" icon={MonitorPlay}>Studio</NavLink>
+              <NavLink href="/dashboard" icon={MonitorPlay}>الاستوديو</NavLink>
             )}
           </div>
 
@@ -68,8 +68,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <div className="flex items-center gap-4">
                 <Link href="/submit">
                   <Button className="neon-button bg-primary hover:bg-primary/90 text-white shadow-[0_0_20px_rgba(168,85,247,0.3)] border-none">
-                    <Plus className="w-4 h-4 mr-2" />
-                    Submit Clip
+                    <Plus className="w-4 h-4 ml-2" />
+                    إرسال مقطع
                   </Button>
                 </Link>
                 
@@ -80,14 +80,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <AvatarFallback className="bg-muted text-xs">{user.username.slice(0, 2).toUpperCase()}</AvatarFallback>
                     </Avatar>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 bg-card border-border/50">
+                  <DropdownMenuContent align="start" className="w-56 bg-card border-border/50">
                     <div className="px-2 py-1.5 text-sm font-semibold text-foreground">
                       {user.username}
-                      <span className="block text-xs font-normal text-muted-foreground capitalize">{user.role}</span>
+                      <span className="block text-xs font-normal text-muted-foreground capitalize">{user.role === "streamer" ? "منِتِج محتوى" : "مستخدم"}</span>
                     </div>
                     <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={() => logout.mutate()}>
-                      <LogOut className="w-4 h-4 mr-2" />
-                      Logout
+                      <LogOut className="w-4 h-4 ml-2" />
+                      تسجيل الخروج
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -98,7 +98,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 className="hover:bg-primary/10 hover:text-primary"
                 onClick={() => window.location.href = "/api/auth/discord"}
               >
-                Log in with Discord
+                تسجيل الدخول عبر ديسكورد
               </Button>
             )}
           </div>
@@ -112,25 +112,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </SheetTrigger>
             <SheetContent side="right" className="bg-card border-l border-border/50">
               <div className="flex flex-col gap-6 mt-8">
-                <NavLink href="/" icon={Gamepad2}>Feed</NavLink>
+                <NavLink href="/" icon={Gamepad2}>الرسوم</NavLink>
                 {user?.role === "streamer" && (
-                  <NavLink href="/dashboard" icon={MonitorPlay}>Studio</NavLink>
+                  <NavLink href="/dashboard" icon={MonitorPlay}>الاستوديو</NavLink>
                 )}
                 <div className="h-px bg-border/50" />
                 {user ? (
                   <>
                     <Link href="/submit" onClick={() => setIsMobileOpen(false)}>
                       <Button className="w-full bg-primary hover:bg-primary/90">
-                        <Plus className="w-4 h-4 mr-2" /> Submit Clip
+                        <Plus className="w-4 h-4 ml-2" /> إرسال مقطع
                       </Button>
                     </Link>
                     <Button variant="destructive" className="w-full" onClick={() => logout.mutate()}>
-                      <LogOut className="w-4 h-4 mr-2" /> Logout
+                      <LogOut className="w-4 h-4 ml-2" /> تسجيل الخروج
                     </Button>
                   </>
                 ) : (
                   <Button className="w-full" onClick={() => window.location.href = "/api/auth/discord"}>
-                    Log in with Discord
+                    تسجيل الدخول عبر ديسكورد
                   </Button>
                 )}
               </div>
@@ -147,7 +147,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* Footer */}
       <footer className="border-t border-border/40 py-8 mt-auto bg-black/20">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© 2024 StreamerClipHub. Built for gamers.</p>
+          <p>© 2024 StreamerClipHub. تم بناؤه للاعبين والمحتوى الإبداعي.</p>
         </div>
       </footer>
     </div>

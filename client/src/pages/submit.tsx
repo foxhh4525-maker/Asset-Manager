@@ -21,8 +21,8 @@ import { useCreateClip, useClipMetadata } from "@/hooks/use-clips";
 import { Layout } from "@/components/layout";
 
 const submitSchema = z.object({
-  url: z.string().url().regex(/^(https?:\/\/)?(www\.)?(youtube\.com\/clip\/|youtu\.be\/clip\/).+$/, "Must be a valid YouTube Clip URL"),
-  tag: z.string().min(1, "Please select a tag"),
+  url: z.string().url().regex(/^(https?:\/\/)?(www\.)?(youtube\.com\/clip\/|youtu\.be\/clip\/).+$/, "يجب أن يكون رابط مقطع يوتيوب صحيح"),
+  tag: z.string().min(1, "يرجى اختيار فئة"),
 });
 
 export default function SubmitPage() {
@@ -71,8 +71,8 @@ export default function SubmitPage() {
     <Layout>
       <div className="max-w-2xl mx-auto py-12">
         <Link href="/">
-          <Button variant="ghost" className="mb-8 pl-0 hover:pl-2 transition-all">
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Feed
+          <Button variant="ghost" className="mb-8 pr-0 hover:pr-2 transition-all">
+            <ArrowLeft className="w-4 h-4 ml-2" /> العودة إلى الرسوم
           </Button>
         </Link>
 
@@ -82,8 +82,8 @@ export default function SubmitPage() {
           className="space-y-8"
         >
           <div className="text-center space-y-2">
-            <h1 className="text-4xl font-display font-bold text-glow">Submit a Clip</h1>
-            <p className="text-muted-foreground">Share your most epic gaming moments with the community.</p>
+            <h1 className="text-4xl font-display font-bold text-glow">إرسال مقطع</h1>
+            <p className="text-muted-foreground">شارك أفضل لحظاتك في الألعاب مع المجتمع.</p>
           </div>
 
           <Card className="glass-panel border-border/50">
@@ -92,16 +92,17 @@ export default function SubmitPage() {
                 
                 {/* URL Input */}
                 <div className="space-y-2">
-                  <Label htmlFor="url">YouTube Clip URL</Label>
+                  <Label htmlFor="url">رابط مقطع يوتيوب</Label>
                   <div className="relative">
                     <Input
                       id="url"
                       placeholder="https://youtube.com/clip/..."
                       {...form.register("url")}
                       onBlur={handleUrlBlur}
-                      className="pl-10 bg-background/50 border-border focus:border-primary transition-colors h-12"
+                      className="pr-10 bg-background/50 border-border focus:border-primary transition-colors h-12"
+                      dir="ltr"
                     />
-                    <Youtube className="absolute left-3 top-3.5 w-5 h-5 text-muted-foreground" />
+                    <Youtube className="absolute right-3 top-3.5 w-5 h-5 text-muted-foreground" />
                   </div>
                   {form.formState.errors.url && (
                     <p className="text-destructive text-sm mt-1">{form.formState.errors.url.message as string}</p>
@@ -111,7 +112,7 @@ export default function SubmitPage() {
                 {/* Metadata Preview */}
                 {fetchMetadata.isPending && (
                   <div className="flex items-center justify-center py-8 text-muted-foreground animate-pulse">
-                    <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Fetching clip info...
+                    <Loader2 className="w-5 h-5 ml-2 animate-spin" /> جاري جلب معلومات المقطع...
                   </div>
                 )}
 
@@ -128,12 +129,12 @@ export default function SubmitPage() {
                       </div>
                     </div>
                     <div className="flex-1 min-w-0 py-1 space-y-1">
-                      <h4 className="font-semibold truncate pr-4">{metadata.title}</h4>
+                      <h4 className="font-semibold truncate pl-4">{metadata.title}</h4>
                       <p className="text-sm text-muted-foreground flex items-center gap-1">
                         <Film className="w-3 h-3" /> {metadata.channelName}
                       </p>
                       <div className="flex items-center gap-2 pt-2 text-success text-sm">
-                        <CheckCircle2 className="w-4 h-4" /> Ready to submit
+                        <CheckCircle2 className="w-4 h-4" /> جاهز للإرسال
                       </div>
                     </div>
                   </motion.div>
@@ -141,20 +142,20 @@ export default function SubmitPage() {
 
                 {/* Tag Selection */}
                 <div className="space-y-2">
-                  <Label htmlFor="tag">Category Tag</Label>
+                  <Label htmlFor="tag">فئة المقطع</Label>
                   <Select 
                     onValueChange={(val) => form.setValue("tag", val)}
                     defaultValue={form.getValues("tag")}
                   >
                     <SelectTrigger className="bg-background/50 h-12">
-                      <SelectValue placeholder="Select a category" />
+                      <SelectValue placeholder="اختر فئة" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Funny">Funny / Fail</SelectItem>
-                      <SelectItem value="Epic">Epic Moment</SelectItem>
-                      <SelectItem value="Glitch">Glitch / Bug</SelectItem>
-                      <SelectItem value="Skill">High Skill</SelectItem>
-                      <SelectItem value="Horror">Jumpscare</SelectItem>
+                      <SelectItem value="Funny">مضحك / فشل</SelectItem>
+                      <SelectItem value="Epic">لحظة ملحمية</SelectItem>
+                      <SelectItem value="Glitch">خلل / باج</SelectItem>
+                      <SelectItem value="Skill">مهارة عالية</SelectItem>
+                      <SelectItem value="Horror">مفاجأة مرعبة</SelectItem>
                     </SelectContent>
                   </Select>
                   {form.formState.errors.tag && (
@@ -169,9 +170,9 @@ export default function SubmitPage() {
                 >
                   {createClip.isPending ? (
                     <>
-                      <Loader2 className="w-5 h-5 mr-2 animate-spin" /> Submitting...
+                      <Loader2 className="w-5 h-5 ml-2 animate-spin" /> جاري الإرسال...
                     </>
-                  ) : "Submit Clip"}
+                  ) : "إرسال المقطع"}
                 </Button>
               </form>
             </CardContent>

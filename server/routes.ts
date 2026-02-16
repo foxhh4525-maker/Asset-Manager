@@ -26,25 +26,72 @@ export async function registerRoutes(
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Mock Auth for Development (since we don't have Discord Client ID/Secret yet)
-  // In a real app, we would use proper Passport Discord Strategy
-  app.get("/api/auth/discord", async (req, res) => {
-    // Create or get a mock user
-    let user = await storage.getUserByUsername("StreamerDemo");
-    if (!user) {
-      user = await storage.createUser({
-        discordId: "demo-streamer-id",
-        username: "StreamerDemo",
-        avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Streamer",
-        role: "streamer",
-      } as any);
-    }
-    
-    req.login(user, (err) => {
-      if (err) return res.status(500).send("Login failed");
-      return res.redirect("/");
+  // Setup Passport Discord Strategy if credentials are available
+  if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
+    passport.use(
+      new DiscordStrategy(
+        {
+          clientID: process.env.DISCORD_CLIENT_ID,
+          clientSecret: process.env.DISCORD_CLIENT_SECRET,
+          callbackURL: process.env.DISCORD_CALLBACK_URL || `http://localhost:${process.env.PORT || 5000}/api/auth/discord/callback`,
+          scope: ["identify", "email"],
+        },
+        async (accessToken, refreshToken, profile, done) => {
+          try {
+            let user = await storage.getUserByDiscordId(profile.id);
+            
+            if (!user) {
+              user = await storage.createUser({
+                discordId: profile.id,
+                username: profile.username,
+                avatarUrl: profile.avatar 
+                  ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
+                  : `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`,
+                role: "user",
+              } as any);
+            }
+            
+            done(null, user);
+          } catch (error) {
+            done(error);
+          }
+        }
+      )
+    );
+
+    // Discord OAuth routes
+    app.get(
+      "/api/auth/discord",
+      passport.authenticate("discord", { scope: ["identify", "email"] })
+    );
+
+    app.get(
+      "/api/auth/discord/callback",
+      passport.authenticate("discord", { failureRedirect: "/" }),
+      (req, res) => {
+        res.redirect("/");
+      }
+    );
+  } else {
+    // Mock Auth for Development (when Discord credentials are not configured)
+    app.get("/api/auth/discord", async (req, res) => {
+      // Create or get a mock user
+      let user = await storage.getUserByUsername("StreamerDemo");
+      if (!user) {
+        user = await storage.createUser({
+          discordId: "demo-streamer-id",
+          username: "StreamerDemo",
+          avatarUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Streamer",
+          role: "streamer",
+        } as any);
+      }
+      
+      req.login(user, (err) => {
+        if (err) return res.status(500).send("Login failed");
+        return res.redirect("/");
+      });
     });
-  });
+  }
 
   app.post("/api/auth/mock-login", async (req, res) => {
     // Create or get a mock user

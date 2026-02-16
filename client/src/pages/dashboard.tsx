@@ -70,7 +70,7 @@ export default function Dashboard() {
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                 <Play className="w-16 h-16 mb-4 opacity-20" />
-                <p>No clips in queue</p>
+                <p>لا توجد مقاطع في قائمة الانتظار</p>
               </div>
             )}
             
@@ -85,7 +85,7 @@ export default function Dashboard() {
                         {currentClip.tag}
                       </Badge>
                       <span className="text-sm text-gray-300">
-                        Submitted by <span className="text-white font-medium">{currentClip.submitter?.username}</span>
+                        تم إرساله من قبل <span className="text-white font-medium">{currentClip.submitter?.username}</span>
                       </span>
                     </div>
                   </div>
@@ -97,14 +97,14 @@ export default function Dashboard() {
                       onClick={() => handleDecision('rejected')}
                       className="bg-red-500/20 hover:bg-red-500/40 text-red-500 border border-red-500/50"
                     >
-                      <X className="w-5 h-5 mr-2" /> Reject
+                      <X className="w-5 h-5 ml-2" /> رفض
                     </Button>
                     <Button 
                       size="lg" 
                       onClick={() => handleDecision('approved')}
                       className="bg-green-500/20 hover:bg-green-500/40 text-green-500 border border-green-500/50"
                     >
-                      <Check className="w-5 h-5 mr-2" /> Approve
+                      <Check className="w-5 h-5 ml-2" /> موافقة
                     </Button>
                   </div>
                 </div>
@@ -118,7 +118,7 @@ export default function Dashboard() {
           <div className="p-4 border-b border-border/50 bg-background/50 backdrop-blur">
             <h3 className="font-semibold flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-              Review Queue
+              قائمة المراجعة
               <span className="ml-auto text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
                 {clips?.length || 0}
               </span>
@@ -168,7 +168,7 @@ export default function Dashboard() {
               
               {clips?.length === 0 && (
                 <div className="p-8 text-center text-muted-foreground text-sm">
-                  Queue is empty! 🎉
+                  القائمة فارغة! 🎉
                 </div>
               )}
             </div>
@@ -176,7 +176,7 @@ export default function Dashboard() {
           
           <div className="p-4 border-t border-border/50 bg-background/50">
             <Button variant="outline" className="w-full" onClick={handleNext}>
-              <SkipForward className="w-4 h-4 mr-2" /> Skip Clip
+              <SkipForward className="w-4 h-4 ml-2" /> تخطي المقطع
             </Button>
           </div>
         </div>

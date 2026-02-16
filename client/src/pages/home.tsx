@@ -25,14 +25,14 @@ export default function Home() {
         <div className="relative z-10 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-sm font-medium mb-4">
             <Trophy className="w-4 h-4" />
-            <span>Weekly Highlights Contest Live!</span>
+            <span>مسابقة أفضل المقاطع الأسبوعية مستمرة!</span>
           </div>
           <h1 className="text-4xl md:text-6xl font-display font-extrabold tracking-tight mb-4 text-glow">
-            Discover Epic <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">Gaming Moments</span>
+            اكتشف اللحظات <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary">الألعاب الملحمية</span>
           </h1>
           <p className="text-lg text-muted-foreground mb-8">
-            The community's best clips, ranked by you. Submit your plays, vote on others, and climb the leaderboard.
+            أفضل المقاطع من المجتمع، يتم تصنيفها من قبلك. أرسل مقاطعك، صوّت على الآخرين، وتسلق لوحة الترتيب.
           </p>
         </div>
       </div>
@@ -42,10 +42,10 @@ export default function Home() {
         <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as any)} className="w-[400px]">
           <TabsList className="bg-card border border-border/50 p-1 h-12">
             <TabsTrigger value="new" className="h-10 data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Clock className="w-4 h-4 mr-2" /> Newest
+              <Clock className="w-4 h-4 ml-2" /> الأحدث
             </TabsTrigger>
             <TabsTrigger value="top" className="h-10 data-[state=active]:bg-primary data-[state=active]:text-white">
-              <Flame className="w-4 h-4 mr-2" /> Top Rated
+              <Flame className="w-4 h-4 ml-2" /> الأعلى تقييماً
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -60,11 +60,11 @@ export default function Home() {
         </div>
       ) : error ? (
         <div className="text-center py-20">
-          <p className="text-destructive">Failed to load clips. Please try again.</p>
+          <p className="text-destructive">فشل في تحميل المقاطع. يرجى المحاولة مرة أخرى.</p>
         </div>
       ) : clips?.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
-          <p>No clips found. Be the first to submit one!</p>
+          <p>لا توجد مقاطع. كن الأول في إرسال واحد!</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">

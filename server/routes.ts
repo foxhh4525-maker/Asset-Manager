@@ -28,7 +28,10 @@ export async function registerRoutes(
     tableName: "session",
     // create table automatically if missing (safe to run repeatedly)
     // disable automatic creation at runtime; create via migrations instead
-    createTableIfMissing: false,
+    // Allow the library to create the session table automatically when
+    // running in non-production (development/demo) environments. In
+    // production we expect migrations to manage the schema.
+    createTableIfMissing: process.env.NODE_ENV !== "production",
   });
 
   // Log store errors for troubleshooting

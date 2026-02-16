@@ -71,7 +71,10 @@ export async function registerRoutes(
       "/api/auth/callback/discord",
       passport.authenticate("discord", { failureRedirect: "/" }),
       (req, res) => {
-        res.redirect("/");
+        // Smart redirect based on user role
+        const user = req.user as any;
+        const redirectPath = user?.role === "streamer" ? "/dashboard" : "/";
+        res.redirect(redirectPath);
       }
     );
   } else {

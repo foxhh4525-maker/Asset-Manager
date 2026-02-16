@@ -33,7 +33,8 @@ export async function registerRoutes(
         {
           clientID: process.env.DISCORD_CLIENT_ID,
           clientSecret: process.env.DISCORD_CLIENT_SECRET,
-          callbackURL: process.env.DISCORD_CALLBACK_URL || `http://localhost:${process.env.PORT || 5000}/api/auth/discord/callback`,
+          // Use the exact, lowercase callback URL required by Discord
+          callbackURL: "https://asset-manager--hichamadmin.replit.app/api/auth/callback/discord",
           scope: ["identify", "email"],
         },
         async (accessToken, refreshToken, profile, done) => {
@@ -65,8 +66,9 @@ export async function registerRoutes(
       passport.authenticate("discord", { scope: ["identify", "email"] })
     );
 
+    // Discord will redirect to this exact path, ensure it matches the app settings
     app.get(
-      "/api/auth/discord/callback",
+      "/api/auth/callback/discord",
       passport.authenticate("discord", { failureRedirect: "/" }),
       (req, res) => {
         res.redirect("/");

@@ -6,6 +6,12 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+// If running behind a reverse proxy (e.g., Replit, Heroku), trust the proxy
+// so secure cookies and redirects work as expected.
+if (process.env.TRUST_PROXY || process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

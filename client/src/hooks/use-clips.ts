@@ -33,8 +33,19 @@ export function useCreateClip() {
       });
       
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Failed to submit clip");
+        let errMsg = "Failed to submit clip";
+        try {
+          const error = await res.json();
+          errMsg = error?.message || JSON.stringify(error) || errMsg;
+        } catch (e) {
+          try {
+            const text = await res.text();
+            if (text) errMsg = text;
+          } catch {
+            /* ignore */
+          }
+        }
+        throw new Error(errMsg);
       }
       return await res.json();
     },
@@ -115,8 +126,19 @@ export function useClipMetadata() {
       });
       
       if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.message || "Invalid Clip URL");
+        let errMsg = "Invalid Clip URL";
+        try {
+          const error = await res.json();
+          errMsg = error?.message || JSON.stringify(error) || errMsg;
+        } catch (e) {
+          try {
+            const text = await res.text();
+            if (text) errMsg = text;
+          } catch {
+            /* ignore */
+          }
+        }
+        throw new Error(errMsg);
       }
       return await res.json();
     },

@@ -66,6 +66,40 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run SQL migrations (idempotent) found in the migrations/ folder.
+  // This ensures tables like the `session` table are present when the
+  // app starts (useful for development and simple deployments).
+  try {
+    const fs = await import("fs/promises");
+    const path = await import("path");
+    const { pool } = await import("./db");
+
+    if (pool) {
+      const client = await pool.connect();
+      try {
+        const migrationsDir = path.resolve(process.cwd(), "migrations");
+        const files = await fs.readdir(migrationsDir);
+        // sort to execute in deterministic order and run sequentially
+        const sqlFiles = files.filter((f) => f.endsWith(".sql")).sort();
+        for (const file of sqlFiles) {
+          try {
+            const sql = await fs.readFile(path.join(migrationsDir, file), "utf8");
+            await client.query(sql);
+            log(`Applied migration: ${file}`, "migrations");
+          } catch (e: any) {
+            // log and continue — migrations are written to be idempotent
+            log(`Migration ${file} warning: ${e?.message || e}`, "migrations");
+          }
+        }
+      } finally {
+        client.release();
+      }
+    } else {
+      log("No database pool available; skipping migrations.", "migrations");
+    }
+  } catch (err) {
+    log(`Migration runner error: ${err}`);
+  }
   // Ensure PostgreSQL enum has 'user' value for Discord signups
   try {
     const { pool } = await import("./db");

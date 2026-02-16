@@ -22,22 +22,31 @@ export async function registerRoutes(
   const cookieSecure = isProd || publicUrl.startsWith("https://");
   const cookieSameSite: any = cookieSecure ? "none" : "lax";
 
-  // Configure session with Postgres store
-  const store = new PgSession({
-    pool,
-    tableName: "session",
-    // create table automatically if missing (safe to run repeatedly)
-    // disable automatic creation at runtime; create via migrations instead
-    // Allow the library to create the session table automatically when
-    // running in non-production (development/demo) environments. In
-    // production we expect migrations to manage the schema.
-    createTableIfMissing: process.env.NODE_ENV !== "production",
-  });
+  // Configure session store. Prefer Postgres-backed store when `pool` is
+  // available, and create the table automatically if it's missing so the
+  // app works even when migrations haven't been applied yet. If no DB
+  // connection is available, fall back to the in-memory store so the
+  // server keeps running (useful for local demo mode).
+  let store: any;
+  if (pool) {
+    store = new PgSession({
+      pool,
+      tableName: "session",
+      // Ensure the session table is created automatically when missing.
+      // This is safe and idempotent; migrations are still recommended
+      // for production deployments but this prevents runtime failures.
+      createTableIfMissing: true,
+    });
 
-  // Log store errors for troubleshooting
-  store.on && store.on("error", (err: any) => {
-    console.error("Session store error:", err);
-  });
+    // Log store errors for troubleshooting
+    store.on && store.on("error", (err: any) => {
+      console.error("Session store error:", err);
+    });
+  } else {
+    console.warn("No database pool available — using in-memory session store.");
+    const MemoryStore = (session as any).MemoryStore || (session as any).Store;
+    store = new MemoryStore();
+  }
 
   app.use(
     session({

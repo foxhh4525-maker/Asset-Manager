@@ -71,11 +71,6 @@ export const insertUserSchema = createInsertSchema(users).omit({ id: true, creat
 export const insertClipSchema = createInsertSchema(clips).omit({ 
   id: true, 
   createdAt: true 
-}).partial({ 
-  status: true,
-  upvotes: true, 
-  downvotes: true,
-  submittedBy: true
 });
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true });
 

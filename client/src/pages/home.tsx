@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Layout } from "@/components/layout";
 import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";
+import { useUser } from "@/hooks/use-auth";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Flame, Clock, Trophy, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -91,6 +92,8 @@ function ClipPlayer({ clip }: { clip: any }) {
 
 export default function Home() {
   const [sortBy, setSortBy] = useState<"new" | "top">("new");
+  const { data: user } = useUser();
+  const isAdmin = user?.role === "admin";
   const [selectedClip, setSelectedClip] = useState<any>(null);
 
   const { data: clips, isLoading, error } = useClips({
@@ -153,7 +156,7 @@ export default function Home() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {clips?.map((clip: any) => (
-            <ClipCard key={clip.id} clip={clip} onPlay={() => setSelectedClip(clip)} />
+            <ClipCard key={clip.id} clip={clip} onPlay={() => setSelectedClip(clip)} isAdmin={isAdmin} />
           ))}
         </div>
       )}

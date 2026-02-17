@@ -14,7 +14,8 @@ export interface IStorage {
   getClip(id: number): Promise<Clip | undefined>;
   createClip(clip: InsertClip): Promise<Clip>;
   updateClipStatus(id: number, status: string): Promise<Clip | undefined>;
-  
+  deleteClip(id: number): Promise<boolean>;
+
   // Votes
   getVote(userId: number, clipId: number): Promise<Vote | undefined>;
   submitVote(vote: InsertVote): Promise<void>;
@@ -97,6 +98,13 @@ export class DatabaseStorage implements IStorage {
     // @ts-ignore
     const [updatedClip] = await db.update(clips).set({ status }).where(eq(clips.id, id)).returning();
     return updatedClip;
+  }
+
+  async deleteClip(id: number): Promise<boolean> {
+    // احذف الأصوات أولاً ثم المقطع
+    await db.delete(votes).where(eq(votes.clipId, id));
+    const result = await db.delete(clips).where(eq(clips.id, id)).returning();
+    return result.length > 0;
   }
 
   async getVote(userId: number, clipId: number): Promise<Vote | undefined> {
@@ -187,6 +195,14 @@ class InMemoryStorage implements IStorage {
     }
     this.clips.push(newClip);
     return newClip as Clip;
+  }
+
+  async deleteClip(id: number): Promise<boolean> {
+    const idx = this.clips.findIndex(c => c.id === id);
+    if (idx === -1) return false;
+    this.clips.splice(idx, 1);
+    this.votes = this.votes.filter(v => v.clipId !== id);
+    return true;
   }
 
   async updateClipStatus(id: number, status: string) {

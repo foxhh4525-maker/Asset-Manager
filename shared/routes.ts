@@ -75,6 +75,16 @@ export const api = {
         401: errorSchemas.unauthorized,
       },
     },
+    delete: {
+      method: 'DELETE' as const,
+      path: '/api/clips/:id' as const,
+      responses: {
+        200: z.object({ success: z.boolean() }),
+        404: errorSchemas.notFound,
+        401: errorSchemas.unauthorized,
+        403: errorSchemas.unauthorized,
+      },
+    },
     vote: {
       method: 'POST' as const,
       path: '/api/clips/:id/vote' as const,

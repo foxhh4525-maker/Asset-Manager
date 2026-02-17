@@ -293,6 +293,22 @@ export async function registerRoutes(
     res.json(updated);
   });
 
+  // ── حذف مقطع (للمشرفين فقط) ──────────────────────────────
+  app.delete("/api/clips/:id", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const user = req.user as any;
+    if (user.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden: Admins only" });
+    }
+    const clipId = parseInt(req.params.id);
+    if (isNaN(clipId)) return res.status(400).json({ message: "Invalid clip ID" });
+    const deleted = await storage.deleteClip(clipId);
+    if (!deleted) return res.status(404).json({ message: "Clip not found" });
+    res.json({ success: true });
+  });
+
   app.post(api.clips.vote.path, async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });

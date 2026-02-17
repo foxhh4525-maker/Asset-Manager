@@ -11,7 +11,7 @@ export function useClips(filters?: { status?: ClipStatus; sort?: 'new' | 'top' }
       const url = filters 
         ? `${api.clips.list.path}?${new URLSearchParams(filters as any).toString()}`
         : api.clips.list.path;
-      
+
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch clips");
       return await res.json();
@@ -31,7 +31,7 @@ export function useCreateClip() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      
+
       if (!res.ok) {
         let errMsg = "Failed to submit clip";
         try {
@@ -80,7 +80,7 @@ export function useUpdateClipStatus() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
       });
-      
+
       if (!res.ok) throw new Error("Failed to update status");
       return await res.json();
     },
@@ -106,7 +106,7 @@ export function useVoteClip() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ value }),
       });
-      
+
       if (!res.ok) throw new Error("Failed to vote");
       return await res.json();
     },
@@ -124,7 +124,7 @@ export function useClipMetadata() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
       });
-      
+
       if (!res.ok) {
         let errMsg = "Invalid Clip URL";
         try {
@@ -141,6 +141,33 @@ export function useClipMetadata() {
         throw new Error(errMsg);
       }
       return await res.json();
+    },
+  });
+}
+
+export function useDeleteClip() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/clips/${id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete clip");
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.clips.list.path] });
+      toast({
+        title: "تم الحذف",
+        description: "تم حذف المقطع بنجاح.",
+        variant: "destructive",
+      });
+    },
+    onError: () => {
+      toast({ title: "خطأ", description: "فشل حذف المقطع.", variant: "destructive" });
     },
   });
 }

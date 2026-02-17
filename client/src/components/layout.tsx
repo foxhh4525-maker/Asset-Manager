@@ -66,8 +66,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-2">
             <NavLink href="/" icon={Gamepad2}>الرسوم</NavLink>
-            {user?.role === "streamer" && (
-              <NavLink href="/dashboard" icon={MonitorPlay}>الاستوديو</NavLink>
+            {user?.role === "admin" && (
+              <NavLink href="/studio" icon={MonitorPlay}>لوحة التحكم</NavLink>
             )}
           </div>
 
@@ -94,7 +94,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <DropdownMenuContent align="start" className="w-56 bg-card border-border/50">
                     <div className="px-2 py-1.5 text-sm font-semibold text-foreground">
                       {user.username}
-                      <span className="block text-xs font-normal text-muted-foreground capitalize">{user.role === "streamer" ? "منِتِج محتوى" : "مستخدم"}</span>
+                      <span className="block text-xs font-normal text-muted-foreground capitalize">{user.role === "admin" ? "مشرف" : user.role === "streamer" ? "منِتِج محتوى" : "مستخدم"}</span>
                     </div>
                     <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={() => logout.mutate()}>
                       <LogOut className="w-4 h-4 ml-2" />
@@ -124,8 +124,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <SheetContent side="right" className="bg-card border-l border-border/50">
               <div className="flex flex-col gap-6 mt-8">
                 <NavLink href="/" icon={Gamepad2}>الرسوم</NavLink>
-                {user?.role === "streamer" && (
-                  <NavLink href="/dashboard" icon={MonitorPlay}>الاستوديو</NavLink>
+                {user?.role === "admin" && (
+                  <NavLink href="/studio" icon={MonitorPlay}>لوحة التحكم</NavLink>
                 )}
                 <div className="h-px bg-border/50" />
                 {user ? (

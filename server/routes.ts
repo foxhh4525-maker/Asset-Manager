@@ -8,6 +8,8 @@ import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
+import fs from "fs";
+import path from "path";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -324,6 +326,22 @@ export async function registerRoutes(
       res.status(400).json({ message: "Invalid YouTube URL" });
     }
   });
+
+  // Ensure /studio route is handled so direct visits don't 404
+  const studioHandler = (req: any, res: any) => {
+    if (process.env.NODE_ENV === "production") {
+      try {
+        const distIndex = path.resolve(__dirname, "../client/index.html");
+        if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
+      } catch (e) {
+        // ignore and fallthrough to redirect
+      }
+      return res.redirect("/");
+    }
+    return res.redirect("/");
+  };
+
+  app.get(/^\/studio(\/.*)?$/, studioHandler);
 
   return httpServer;
 }

@@ -202,7 +202,7 @@ export async function registerRoutes(
   });
 
   // ✅ Endpoint لترقية الحساب الحالي إلى Admin مباشرةً (استخدم مرة واحدة ثم احذفه)
-  app.post("/api/debug/make-admin", async (req, res) => {
+  app.get("/api/debug/make-admin", async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
@@ -221,11 +221,7 @@ export async function registerRoutes(
         (req.user as any).role = "admin";
         req.session.save((err) => {
           if (err) return res.status(500).json({ message: "Session save failed" });
-          res.json({
-            success: true,
-            message: `✅ تم ترقية ${user.username} إلى admin بنجاح!`,
-            user: { id: user.id, username: user.username, role: "admin" },
-          });
+          res.redirect("/studio");
         });
       } finally {
         client.release();

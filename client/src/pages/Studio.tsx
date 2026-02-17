@@ -34,21 +34,40 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
       return;
     }
 
-    // روابط Clip: نحل مباشرة من المتصفح عبر YouTube oEmbed
+    // روابط Clip: نستخدم oEmbed ونعالج unicode escaping
     const clipMatch = url.match(/youtube\.com\/clip\/([\w-]+)/);
     if (clipMatch) {
       fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`)
-        .then((r) => r.json())
+        .then((r) => {
+          if (!r.ok) throw new Error("oEmbed failed");
+          return r.json();
+        })
         .then((data: any) => {
-          const srcMatch = data?.html?.match(/src="([^"]+)"/);
+          // YouTube يُشفّر HTML بـ unicode (\u003c بدل <)
+          // بعد JSON.parse يكون النص عادياً — نبحث عن src
+          const html: string = data?.html ?? "";
+          // استخراج src من iframe
+          const srcMatch = html.match(/src=(?:"|\u0022)([^"\u0022]+)(?:"|\u0022)/);
           if (srcMatch) {
-            const rawSrc = srcMatch[1].replace(/&amp;/g, "&");
+            const rawSrc = srcMatch[1]
+              .replace(/&amp;/g, "&")
+              .replace(/\u0026/g, "&");
             setEmbedSrc(rawSrc);
           } else {
-            setError(true);
+            // fallback: نبني الرابط بـ clip parameter مباشرة
+            const clipId2 = clipMatch[1];
+            setEmbedSrc(
+              `https://www.youtube.com/embed?listType=playlist&list=${clipId2}&clip=${clipId2}`
+            );
           }
         })
-        .catch(() => setError(true))
+        .catch(() => {
+          // fallback نهائي: نستخدم clip ID مباشرة في embed
+          const clipId2 = clipMatch[1];
+          setEmbedSrc(
+            `https://www.youtube.com/embed/${clipId2}?clip=${clipId2}&clipt=EAE`
+          );
+        })
         .finally(() => setLoading(false));
       return;
     }

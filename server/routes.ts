@@ -320,6 +320,26 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ Endpoint لجلب Video ID من رابط YouTube Clip
+  app.get("/api/youtube/resolve-clip", async (req, res) => {
+    const { url } = req.query as { url: string };
+    if (!url) return res.status(400).json({ message: "URL required" });
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      });
+      const html = await response.text();
+      const videoIdMatch = html.match(/"videoId":"([\w-]{11})"/);
+      if (videoIdMatch) return res.json({ videoId: videoIdMatch[1] });
+      return res.status(404).json({ message: "Could not extract video ID" });
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message });
+    }
+  });
+
   // ✅ studioHandler محذوف — كان يعيد التوجيه لـ / ويمنع الوصول للصفحة
   // Vite يخدم index.html لكل المسارات غير المعروفة تلقائياً
 

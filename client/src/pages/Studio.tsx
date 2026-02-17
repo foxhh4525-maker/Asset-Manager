@@ -106,18 +106,19 @@ export default function Studio() {
                   {(() => {
                     const url = currentClip.url;
                     // YouTube Clip: youtube.com/clip/CLIP_ID
+                    // YouTube منع تضمين الكليبات — نعرض زر مشاهدة بدلاً منه
                     const clipMatch = url.match(/youtube\.com\/clip\/([\w-]+)/);
                     if (clipMatch) {
                       return (
-                        <iframe
-                          key={currentClip.id}
-                          src={`https://www.youtube.com/embed/${clipMatch[1]}?clip=${clipMatch[1]}&clipt=EAA`}
-                          width="100%"
-                          height="100%"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                          style={{ border: "none" }}
-                        />
+                        <div className="flex flex-col items-center justify-center h-full gap-4 bg-black">
+                          {currentClip.thumbnailUrl && (
+                            <img src={currentClip.thumbnailUrl} alt={currentClip.title} className="max-h-40 rounded-lg object-cover opacity-80" />
+                          )}
+                          <p className="text-sm text-muted-foreground text-center px-4">YouTube لا يسمح بتضمين الكليبات مباشرة</p>
+                          <a href={url} target="_blank" rel="noopener noreferrer" className="bg-red-600 hover:bg-red-700 text-white px-5 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors">
+                            ▶ شاهد على YouTube
+                          </a>
+                        </div>
                       );
                     }
                     // YouTube watch: youtube.com/watch?v=VIDEO_ID

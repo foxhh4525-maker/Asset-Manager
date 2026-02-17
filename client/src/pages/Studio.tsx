@@ -1,58 +1,66 @@
 import { useState } from "react";
-// ✅ استيراد مباشر (ليس lazy) لتجنب انهيار الصفحة
-import ReactPlayer from "react-player/youtube";
+// ✅ استيراد كامل وليس lazy
+import ReactPlayer from "react-player";
 import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
-import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Check, X, AlertCircle, Loader2, ShieldAlert } from "lucide-react";
+import { Check, X, AlertCircle, Loader2, ShieldAlert, ExternalLink } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// ── مساعد: استخراج videoId + start + end من رابط YouTube ──
+// ── استخرج videoId + start + end من أي رابط YouTube ──────
 function parseYouTubeUrl(url: string): {
   videoId: string | null;
   startTime: number;
   endTime: number;
   cleanUrl: string;
+  isClipUrl: boolean;
 } {
+  if (!url) return { videoId: null, startTime: 0, endTime: 0, cleanUrl: url, isClipUrl: false };
+
+  const isClipUrl = /youtube\.com\/clip\//.test(url);
+
   try {
     const u = new URL(url);
     let videoId = u.searchParams.get("v");
     if (!videoId && u.hostname === "youtu.be") {
-      videoId = u.pathname.slice(1, 12) || null;
+      const seg = u.pathname.split("/").filter(Boolean)[0];
+      if (seg && seg.length === 11) videoId = seg;
     }
     const startTime = parseInt(u.searchParams.get("start") ?? "0") || 0;
     const endTime   = parseInt(u.searchParams.get("end")   ?? "0") || 0;
     const cleanUrl  = videoId
       ? `https://www.youtube.com/watch?v=${videoId}`
       : url;
-    return { videoId, startTime, endTime, cleanUrl };
+    return { videoId, startTime, endTime, cleanUrl, isClipUrl };
   } catch {
-    return { videoId: null, startTime: 0, endTime: 0, cleanUrl: url };
+    return { videoId: null, startTime: 0, endTime: 0, cleanUrl: url, isClipUrl };
   }
 }
 
-// ── مكوّن المشغل المبسَّط ────────────────────────────────────
-// الآن الروابط في قاعدة البيانات كلها بصيغة watch?v= مع start/end
-// لذا لا حاجة لاستدعاء oEmbed — نقرأ القيم من الرابط مباشرة
+// ── مكوّن المشغل مع fallback للروابط المكسورة ────────────
 function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
-  const { videoId, startTime, endTime, cleanUrl } = parseYouTubeUrl(url);
+  const { videoId, startTime, endTime, cleanUrl, isClipUrl } = parseYouTubeUrl(url);
 
-  if (!videoId) {
+  if (isClipUrl || !videoId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-        <p className="text-sm">تعذّر تحميل الفيديو</p>
+      <div className="flex flex-col items-center justify-center h-full gap-4 text-muted-foreground">
+        <p className="text-sm text-center px-4">
+          {isClipUrl
+            ? "رابط YouTube Clip لا يمكن تضمينه — يرجى مراجعته على YouTube"
+            : "تعذّر تحميل الفيديو"}
+        </p>
         <a
           href={url}
           target="_blank"
           rel="noopener noreferrer"
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm"
+          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
         >
-          ▶ افتح على YouTube
+          <ExternalLink className="w-4 h-4" />
+          افتح على YouTube
         </a>
       </div>
     );
@@ -60,7 +68,7 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
 
   return (
     <ReactPlayer
-      key={`${clipId}-${url}`}
+      key={`${clipId}-${cleanUrl}`}
       url={cleanUrl}
       width="100%"
       height="100%"
@@ -69,7 +77,6 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
       config={{
         youtube: {
           playerVars: {
-            // ✅ يجبر المشغل على البدء والانتهاء عند اللقطة المحددة
             start:          startTime || 0,
             ...(endTime > 0 ? { end: endTime } : {}),
             rel:            0,
@@ -83,7 +90,6 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
 
 export default function Studio() {
   const { data: user, isLoading: isAuthLoading } = useUser();
-  const [, navigate] = useLocation();
 
   const { data: clips = [], isLoading, error } = useClips({
     status: "pending",
@@ -129,9 +135,7 @@ export default function Studio() {
   return (
     <Layout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6 text-right">
-          لوحة التحكم — مراجعة المقاطع
-        </h1>
+        <h1 className="text-2xl font-bold mb-6 text-right">لوحة التحكم — مراجعة المقاطع</h1>
 
         {isLoading ? (
           <div className="flex justify-center py-20">
@@ -155,7 +159,6 @@ export default function Studio() {
                   <div className="aspect-video rounded overflow-hidden bg-black">
                     <YouTubePlayer url={currentClip.url} clipId={currentClip.id} />
                   </div>
-
                   <div className="mt-4 flex items-center justify-between">
                     <div>
                       <h2 className="text-lg font-semibold">{currentClip.title}</h2>
@@ -166,12 +169,8 @@ export default function Studio() {
                         </span>
                       </div>
                     </div>
-
                     <div className="flex gap-2">
-                      <Button
-                        variant="destructive"
-                        onClick={() => handleDecision("rejected")}
-                      >
+                      <Button variant="destructive" onClick={() => handleDecision("rejected")}>
                         <X className="w-4 h-4 ml-1" /> رفض
                       </Button>
                       <Button
@@ -192,9 +191,7 @@ export default function Studio() {
 
             {/* قائمة الانتظار */}
             <div className="bg-card border border-border/50 rounded-xl p-4">
-              <h3 className="font-semibold mb-3 text-right">
-                قائمة الانتظار ({clips.length})
-              </h3>
+              <h3 className="font-semibold mb-3 text-right">قائمة الانتظار ({clips.length})</h3>
               <ScrollArea className="h-[400px]">
                 <div className="space-y-2">
                   {clips.map((clip, index) => (
@@ -212,15 +209,9 @@ export default function Studio() {
                     >
                       <div className="w-12 h-8 rounded bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                         {clip.thumbnailUrl ? (
-                          <img
-                            src={clip.thumbnailUrl}
-                            alt={clip.title}
-                            className="w-full h-full object-cover"
-                          />
+                          <img src={clip.thumbnailUrl} alt={clip.title} className="w-full h-full object-cover" />
                         ) : (
-                          <span className="text-xs text-muted-foreground">
-                            ...
-                          </span>
+                          <span className="text-xs text-muted-foreground">...</span>
                         )}
                       </div>
                       <div className="flex-1 min-w-0 text-right">

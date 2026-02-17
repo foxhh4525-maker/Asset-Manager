@@ -12,6 +12,11 @@ export function useUser() {
       return await res.json();
     },
     retry: false,
+    // ✅ الإصلاح الحاسم: لا نخزّن بيانات المستخدم إلى الأبد
+    // staleTime: Infinity كان في queryClient يجعل الدور القديم يبقى محفوظاً حتى بعد تغييره في DB
+    staleTime: 0,
+    // ✅ إعادة جلب بيانات المستخدم عند العودة للتبويب — يضمن تحديث الدور فوراً
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -21,11 +26,16 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: async () => {
-      const res = await fetch(api.auth.logout.path, { method: "POST", credentials: "include" });
+      const res = await fetch(api.auth.logout.path, {
+        method: "POST",
+        credentials: "include",
+      });
       if (!res.ok) throw new Error("Failed to logout");
     },
     onSuccess: () => {
       queryClient.setQueryData([api.auth.me.path], null);
+      // ✅ مسح كل الـ cache بعد الخروج لضمان بيانات نظيفة عند الدخول مجدداً
+      queryClient.clear();
       toast({
         title: "Logged out",
         description: "See you next time, legend!",
@@ -36,11 +46,7 @@ export function useLogout() {
 
 // Discord OAuth login
 export function useLogin() {
-  const { toast } = useToast();
-  
   const login = () => {
-    // Redirect to Discord OAuth endpoint
-    // The backend will handle authentication and redirect back
     window.location.href = "/api/auth/discord";
   };
 

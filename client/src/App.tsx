@@ -11,7 +11,7 @@ import Dashboard from "@/pages/dashboard";
 import Studio from "@/pages/Studio";
 import { useUser } from "@/hooks/use-auth";
 
-// ✅ مكوّن لحماية صفحة الاستديو — يسمح فقط للأدمن بالدخول
+// ✅ حماية صفحة الاستديو — يُسمح فقط للأدمن
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading } = useUser();
 
@@ -36,11 +36,10 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/submit" component={SubmitPage} />
       <Route path="/dashboard" component={Dashboard} />
-      {/* ✅ مسار /studio محمي — يُعاد توجيه غير الأدمن للرئيسية */}
+      {/* ✅ /studio محمي — غير الأدمن يُعاد توجيهه للرئيسية */}
       <Route path="/studio">
         <AdminRoute component={Studio} />
       </Route>
-      {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>
   );

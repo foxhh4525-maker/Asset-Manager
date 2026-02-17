@@ -13,9 +13,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Session setup - use Postgres-backed session store for persistence
-    const PgSession = connectPgSimple(session as any);
-  // Determine whether we are behind a proxy
+  const PgSession = connectPgSimple(session as any);
   const isProd = process.env.NODE_ENV === "production";
   const trustProxy = !!process.env.TRUST_PROXY || isProd;
   const publicUrl = process.env.NEXTAUTH_URL || process.env.DISCORD_CALLBACK_URL || "";
@@ -38,7 +36,6 @@ export async function registerRoutes(
                 "sess" json NOT NULL,
                 "expire" timestamp(6) NOT NULL
               ) WITH (OIDS=FALSE);
-
               ALTER TABLE "session" ADD CONSTRAINT "session_pkey" PRIMARY KEY ("sid");
               CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
             END IF;
@@ -57,7 +54,6 @@ export async function registerRoutes(
       tableName: "session",
       createTableIfMissing: true,
     });
-
     store.on && store.on("error", (err: any) => {
       console.error("Session store error:", err);
     });
@@ -79,7 +75,7 @@ export async function registerRoutes(
         httpOnly: true,
         secure: cookieSecure,
         sameSite: cookieSameSite,
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+        maxAge: 30 * 24 * 60 * 60 * 1000,
       },
     })
   );
@@ -87,7 +83,6 @@ export async function registerRoutes(
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Setup Passport Discord Strategy if credentials are available
   if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
     passport.use(
       new DiscordStrategy(
@@ -100,18 +95,16 @@ export async function registerRoutes(
         async (accessToken, refreshToken, profile, done) => {
           try {
             let user = await storage.getUserByDiscordId(profile.id);
-
             if (!user) {
               user = await storage.createUser({
                 discordId: profile.id,
                 username: profile.username,
-                avatarUrl: profile.avatar 
+                avatarUrl: profile.avatar
                   ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
                   : `https://cdn.discordapp.com/embed/avatars/${Math.floor(Math.random() * 5)}.png`,
                 role: "user",
               } as any);
             }
-
             done(null, user);
           } catch (error) {
             done(error);
@@ -120,10 +113,7 @@ export async function registerRoutes(
       )
     );
 
-    app.get(
-      "/api/auth/discord",
-      passport.authenticate("discord", { scope: ["identify", "email"] })
-    );
+    app.get("/api/auth/discord", passport.authenticate("discord", { scope: ["identify", "email"] }));
 
     app.get(
       "/api/auth/callback/discord",
@@ -134,14 +124,8 @@ export async function registerRoutes(
             console.error("Session save error:", err);
             return res.redirect("/");
           }
-
-          try {
-            console.log("Authenticated user id:", (req.user as any)?.id);
-            console.log("Session ID:", (req.session as any)?.id || (req.sessionID as any));
-          } catch (e) {}
-
-          // ✅ توجيه الأدمن مباشرةً للاستديو بعد تسجيل الدخول
           const user = req.user as any;
+          // ✅ توجيه الأدمن لـ /studio مباشرةً بعد تسجيل الدخول
           let redirectPath = "/";
           if (user?.role === "admin") redirectPath = "/studio";
           else if (user?.role === "streamer") redirectPath = "/dashboard";
@@ -162,7 +146,6 @@ export async function registerRoutes(
           role: "streamer",
         } as any);
       }
-
       req.login(user, (err) => {
         if (err) return res.status(500).send("Login failed");
         return res.redirect("/");
@@ -180,7 +163,6 @@ export async function registerRoutes(
         role: "streamer",
       } as any);
     }
-
     req.login(user, (err) => {
       if (err) return res.status(500).json({ message: "Login failed" });
       return res.json(user);
@@ -222,11 +204,9 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Must be logged in to submit clips" });
     }
-
     try {
       const input = api.clips.create.input.parse(req.body);
       const metadata = await mockYouTubeMetadata(input.url);
-
       const clip = await storage.createClip({
         ...input,
         ...metadata,
@@ -235,34 +215,30 @@ export async function registerRoutes(
         downvotes: 0,
         status: "pending",
       });
-
       res.status(201).json(clip);
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
           message: err.errors[0].message,
-          field: err.errors[0].path.join('.'),
+          field: err.errors[0].path.join("."),
         });
       }
       throw err;
     }
   });
 
-  // ✅ حماية مسار updateStatus — فقط الأدمن يقدر يغير الحالة
+  // ✅ محمي — فقط الأدمن يقدر يغير حالة المقطع
   app.patch(api.clips.updateStatus.path, async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-
     const user = req.user as any;
     if (user.role !== "admin") {
       return res.status(403).json({ message: "Forbidden: Admins only" });
     }
-
     const { status } = req.body;
     const clipId = parseInt(req.params.id);
     const updated = await storage.updateClipStatus(clipId, status);
-
     if (!updated) return res.status(404).json({ message: "Clip not found" });
     res.json(updated);
   });
@@ -271,13 +247,10 @@ export async function registerRoutes(
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-
     const { value } = req.body;
     const clipId = parseInt(req.params.id);
     const userId = (req.user as any).id;
-
     const existingVote = await storage.getVote(userId, clipId);
-
     if (existingVote) {
       if (existingVote.value === value) {
         await storage.deleteVote(existingVote.id);
@@ -287,9 +260,7 @@ export async function registerRoutes(
     } else {
       await storage.submitVote({ userId, clipId, value });
     }
-
     await storage.updateClipVotes(clipId);
-
     const clip = await storage.getClip(clipId);
     res.json({ upvotes: clip?.upvotes || 0, downvotes: clip?.downvotes || 0 });
   });
@@ -304,20 +275,16 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ تم حذف studioHandler الذي كان يعيد التوجيه لـ /
-  // Vite يتعامل مع client-side routing تلقائياً في بيئة التطوير
-  // وفي الإنتاج، vite.ts يعيد index.html لكل المسارات غير المعروفة
+  // ✅ تم حذف studioHandler — كان السبب الرئيسي للمشكلة
+  // Vite يخدم index.html لكل المسارات غير المعروفة تلقائياً
 
   return httpServer;
 }
 
-// Mock Helper
 async function mockYouTubeMetadata(url: string) {
-  await new Promise(r => setTimeout(r, 500));
-
+  await new Promise((r) => setTimeout(r, 500));
   const idMatch = url.match(/clip\/([a-zA-Z0-9_-]+)/);
   const id = idMatch ? idMatch[1] : "unknown";
-
   return {
     title: `Amazing Clip #${id.substring(0, 5)}`,
     thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,

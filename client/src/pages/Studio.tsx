@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
+import ReactPlayer from "react-player";
 import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
@@ -11,30 +12,36 @@ import { motion } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
-  const [embedSrc, setEmbedSrc] = useState<string | null>(null);
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [startSec, setStartSec] = useState<number>(0);
+  const [endSec, setEndSec] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     setLoading(true);
     setError(false);
-    setEmbedSrc(null);
+    setVideoId(null);
+    setStartSec(0);
+    setEndSec(0);
 
-    // روابط عادية: watch?v= أو youtu.be/
+    // روابط عادية watch?v=
     const watchMatch = url.match(/[?&]v=([\w-]{11})/);
-    const shortMatch = url.match(/youtu\.be\/([\w-]{11})/);
     if (watchMatch) {
-      setEmbedSrc(`https://www.youtube.com/embed/${watchMatch[1]}?autoplay=0`);
-      setLoading(false);
-      return;
-    }
-    if (shortMatch) {
-      setEmbedSrc(`https://www.youtube.com/embed/${shortMatch[1]}?autoplay=0`);
+      setVideoId(watchMatch[1]);
       setLoading(false);
       return;
     }
 
-    // روابط Clip: نستخدم oEmbed ونعالج unicode escaping
+    // youtu.be/
+    const shortMatch = url.match(/youtu\.be\/([\w-]{11})/);
+    if (shortMatch) {
+      setVideoId(shortMatch[1]);
+      setLoading(false);
+      return;
+    }
+
+    // YouTube Clip — نجيب videoId من thumbnail_url في oEmbed
     const clipMatch = url.match(/youtube\.com\/clip\/([\w-]+)/);
     if (clipMatch) {
       fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`)
@@ -43,31 +50,21 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
           return r.json();
         })
         .then((data: any) => {
-          // YouTube يُشفّر HTML بـ unicode (\u003c بدل <)
-          // بعد JSON.parse يكون النص عادياً — نبحث عن src
-          const html: string = data?.html ?? "";
-          // استخراج src من iframe
-          const srcMatch = html.match(/src=(?:"|\u0022)([^"\u0022]+)(?:"|\u0022)/);
-          if (srcMatch) {
-            const rawSrc = srcMatch[1]
-              .replace(/&amp;/g, "&")
-              .replace(/\u0026/g, "&");
-            setEmbedSrc(rawSrc);
+          // thumbnail_url: https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg
+          const thumbMatch = data?.thumbnail_url?.match(/\/vi\/([\w-]{11})\//);
+          if (thumbMatch) {
+            setVideoId(thumbMatch[1]);
+            // نحاول نجيب التوقيت من الـ html أيضاً
+            const html: string = data?.html ?? "";
+            const startMatch = html.match(/start=(\d+)/);
+            const endMatch   = html.match(/end=(\d+)/);
+            if (startMatch) setStartSec(parseInt(startMatch[1]));
+            if (endMatch)   setEndSec(parseInt(endMatch[1]));
           } else {
-            // fallback: نبني الرابط بـ clip parameter مباشرة
-            const clipId2 = clipMatch[1];
-            setEmbedSrc(
-              `https://www.youtube.com/embed?listType=playlist&list=${clipId2}&clip=${clipId2}`
-            );
+            setError(true);
           }
         })
-        .catch(() => {
-          // fallback نهائي: نستخدم clip ID مباشرة في embed
-          const clipId2 = clipMatch[1];
-          setEmbedSrc(
-            `https://www.youtube.com/embed/${clipId2}?clip=${clipId2}&clipt=EAE`
-          );
-        })
+        .catch(() => setError(true))
         .finally(() => setLoading(false));
       return;
     }
@@ -84,7 +81,7 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
     );
   }
 
-  if (error || !embedSrc) {
+  if (error || !videoId) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
         <p className="text-sm">تعذّر تحميل الفيديو</p>
@@ -100,18 +97,32 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
     );
   }
 
+  const playerUrl = startSec > 0
+    ? `https://www.youtube.com/watch?v=${videoId}&t=${startSec}`
+    : `https://www.youtube.com/watch?v=${videoId}`;
+
   return (
-    <iframe
-      key={embedSrc}
-      src={embedSrc}
+    <ReactPlayer
+      key={playerUrl}
+      url={playerUrl}
       width="100%"
       height="100%"
-      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-      allowFullScreen
-      style={{ border: "none" }}
+      controls
+      playing={false}
+      config={{
+        youtube: {
+          playerVars: {
+            start: startSec || 0,
+            ...(endSec > 0 ? { end: endSec } : {}),
+            rel: 0,
+            modestbranding: 1,
+          },
+        },
+      }}
     />
   );
 }
+
 
 export default function Studio() {
   const { data: user, isLoading: isAuthLoading } = useUser();

@@ -252,14 +252,19 @@ export async function registerRoutes(
     }
     try {
       const input = api.clips.create.input.parse(req.body);
-      const metadata = await mockYouTubeMetadata(input.url);
+      const metadata = await fetchYouTubeMetadata(input.url);
       const clip = await storage.createClip({
         ...input,
-        ...metadata,
-        submittedBy: (req.user as any).id,
-        upvotes: 0,
+        // ✅ نخزّن الرابط المحوّل (watch?v=...) بدلاً من رابط /clip/ المكسور
+        url:          metadata.convertedUrl,
+        title:        metadata.title,
+        thumbnailUrl: metadata.thumbnailUrl,
+        channelName:  metadata.channelName,
+        duration:     metadata.duration,
+        submittedBy:  (req.user as any).id,
+        upvotes:   0,
         downvotes: 0,
-        status: "pending",
+        status:    "pending",
       });
       res.status(201).json(clip);
     } catch (err) {
@@ -313,78 +318,10 @@ export async function registerRoutes(
   app.post(api.clips.fetchMetadata.path, async (req, res) => {
     try {
       const { url } = req.body;
-      const metadata = await mockYouTubeMetadata(url);
+      const metadata = await fetchYouTubeMetadata(url);
       res.json(metadata);
     } catch (error) {
       res.status(400).json({ message: "Invalid YouTube URL" });
-    }
-  });
-
-  // ✅ Endpoint لجلب Video ID من رابط YouTube Clip
-  app.get("/api/youtube/resolve-clip", async (req, res) => {
-    const { url } = req.query as { url: string };
-    if (!url) return res.status(400).json({ message: "URL required" });
-    try {
-      const clipMatch = url.match(/clip\/([\w-]+)/);
-      if (!clipMatch) return res.status(400).json({ message: "Invalid clip URL" });
-      const clipId = clipMatch[1];
-
-      const apiKey = process.env.YOUTUBE_API_KEY;
-
-      // الطريقة 1: YouTube oEmbed API (لا يحتاج مفتاح)
-      try {
-        const oembedRes = await fetch(
-          `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
-          { headers: { "User-Agent": "Mozilla/5.0" } }
-        );
-        if (oembedRes.ok) {
-          const oembedData = await oembedRes.json() as any;
-          const embedMatch = oembedData?.html?.match(/embed\/([\w-]{11})/);
-          if (embedMatch) {
-            return res.json({ videoId: embedMatch[1], startTime: 0, endTime: 0 });
-          }
-        }
-      } catch (_) {}
-
-      // الطريقة 2: YouTube Data API v3 بالمفتاح
-      if (apiKey) {
-        try {
-          const searchRes = await fetch(
-            `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${clipId}&type=video&key=${apiKey}`,
-            { headers: { "User-Agent": "Mozilla/5.0" } }
-          );
-          if (searchRes.ok) {
-            const searchData = await searchRes.json() as any;
-            if (searchData.items && searchData.items.length > 0) {
-              const videoId = searchData.items[0].id.videoId;
-              if (videoId) return res.json({ videoId, startTime: 0, endTime: 0 });
-            }
-          }
-        } catch (_) {}
-      }
-
-      // الطريقة 3: جلب صفحة YouTube مباشرة
-      const pageRes = await fetch(`https://www.youtube.com/clip/${clipId}`, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-      });
-      const html = await pageRes.text();
-      const videoIdMatch = html.match(/"videoDetails":\{"videoId":"([\w-]{11})"/);
-      if (videoIdMatch) {
-        const startMsMatch = html.match(/"startTimeMs":"(\d+)"/);
-        const endMsMatch   = html.match(/"endTimeMs":"(\d+)"/);
-        return res.json({
-          videoId: videoIdMatch[1],
-          startTime: startMsMatch ? Math.floor(parseInt(startMsMatch[1]) / 1000) : 0,
-          endTime:   endMsMatch   ? Math.floor(parseInt(endMsMatch[1])   / 1000) : 0,
-        });
-      }
-
-      return res.status(404).json({ message: "Could not resolve clip" });
-    } catch (err: any) {
-      return res.status(500).json({ message: err.message });
     }
   });
 
@@ -394,14 +331,94 @@ export async function registerRoutes(
   return httpServer;
 }
 
-async function mockYouTubeMetadata(url: string) {
-  await new Promise((r) => setTimeout(r, 500));
-  const idMatch = url.match(/clip\/([a-zA-Z0-9_-]+)/);
-  const id = idMatch ? idMatch[1] : "unknown";
+// ─────────────────────────────────────────────────────────────
+//  مساعد: تحويل ثوانٍ ← دقائق:ثواني
+// ─────────────────────────────────────────────────────────────
+function formatDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return "0:30";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  مساعد: استخراج videoId من أي رابط YouTube
+// ─────────────────────────────────────────────────────────────
+function extractVideoId(url: string): string | null {
+  return (
+    url.match(/[?&]v=([\w-]{11})/)?.[1] ||
+    url.match(/youtu\.be\/([\w-]{11})/)?.[1] ||
+    null
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  الدالة الرئيسية: جلب بيانات الفيديو وتحويل رابط /clip/
+// ─────────────────────────────────────────────────────────────
+async function fetchYouTubeMetadata(clipUrl: string) {
+  const isClip = /youtube\.com\/clip\//.test(clipUrl);
+
+  if (isClip) {
+    try {
+      const oembedEndpoint = `https://www.youtube.com/oembed?url=${encodeURIComponent(clipUrl)}&format=json`;
+      const resp = await fetch(oembedEndpoint, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+        signal: AbortSignal.timeout(8000),
+      });
+
+      if (resp.ok) {
+        const data = await resp.json() as any;
+
+        // استخرج videoId من thumbnail_url
+        const thumbMatch = (data?.thumbnail_url as string)?.match(/\/vi\/([\w-]{11})\//);
+        const videoId = thumbMatch?.[1] ?? null;
+
+        // استخرج start و end من HTML الـ iframe
+        const html: string = data?.html ?? "";
+        const startMatch = html.match(/[?&]start=(\d+)/);
+        const endMatch   = html.match(/[?&]end=(\d+)/);
+        const startTime  = startMatch ? parseInt(startMatch[1]) : 0;
+        const endTime    = endMatch   ? parseInt(endMatch[1])   : 0;
+
+        const clipDuration = startTime && endTime && endTime > startTime
+          ? endTime - startTime
+          : 30;
+
+        const convertedUrl = videoId
+          ? `https://www.youtube.com/watch?v=${videoId}&start=${startTime}&end=${endTime}`
+          : clipUrl;
+
+        return {
+          convertedUrl,
+          title:        (data.title as string) || "Gaming Clip",
+          thumbnailUrl: (data.thumbnail_url as string) ||
+                        (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ""),
+          channelName:  (data.author_name as string) || "Unknown Channel",
+          duration:     formatDuration(clipDuration),
+          videoId:      videoId ?? "",
+          startTime,
+          endTime,
+        };
+      }
+    } catch (err) {
+      console.warn("[fetchYouTubeMetadata] oEmbed failed:", err);
+    }
+  }
+
+  // ── fallback: روابط watch?v= العادية ──────────────────────
+  const videoId = extractVideoId(clipUrl) ?? "";
+  const urlObj  = (() => { try { return new URL(clipUrl); } catch { return null; } })();
+  const startTime = parseInt(urlObj?.searchParams.get("start") ?? "0") || 0;
+  const endTime   = parseInt(urlObj?.searchParams.get("end")   ?? "0") || 0;
+
   return {
-    title: `Amazing Clip #${id.substring(0, 5)}`,
-    thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
-    channelName: "Random Streamer",
-    duration: "0:30",
+    convertedUrl: clipUrl,
+    title:        "Gaming Clip",
+    thumbnailUrl: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "",
+    channelName:  "Unknown Channel",
+    duration:     formatDuration(endTime - startTime || 30),
+    videoId,
+    startTime,
+    endTime,
   };
 }

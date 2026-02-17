@@ -51,7 +51,11 @@ export const api = {
       method: 'POST' as const,
       path: '/api/clips' as const,
       input: insertClipSchema.extend({
-        url: z.string().regex(/^(https?:\/\/)?(www\.)?(youtube\.com\/clip\/|youtu\.be\/clip\/).+$/, "Must be a valid YouTube Clip URL"),
+        // نقبل رابط /clip/ الأصلي — السيرفر يحوّله تلقائياً قبل الحفظ
+        url: z.string().regex(
+          /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/).+$/,
+          "Must be a valid YouTube Clip or Watch URL"
+        ),
       }),
       responses: {
         201: z.custom<typeof clips.$inferSelect>(),
@@ -91,10 +95,14 @@ export const api = {
       }),
       responses: {
         200: z.object({
-          title: z.string(),
+          title:        z.string(),
           thumbnailUrl: z.string(),
-          channelName: z.string(),
-          duration: z.string(),
+          channelName:  z.string(),
+          duration:     z.string(),
+          convertedUrl: z.string(),
+          videoId:      z.string(),
+          startTime:    z.number(),
+          endTime:      z.number(),
         }),
         400: errorSchemas.validation,
       },

@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import ReactPlayer from "react-player";
+import { useState } from "react";
+// ✅ استيراد مباشر (ليس lazy) لتجنب انهيار الصفحة
+import ReactPlayer from "react-player/youtube";
 import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
@@ -11,77 +12,37 @@ import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
-  const [videoId, setVideoId] = useState<string | null>(null);
-  const [startSec, setStartSec] = useState<number>(0);
-  const [endSec, setEndSec] = useState<number>(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    setError(false);
-    setVideoId(null);
-    setStartSec(0);
-    setEndSec(0);
-
-    // روابط عادية watch?v=
-    const watchMatch = url.match(/[?&]v=([\w-]{11})/);
-    if (watchMatch) {
-      setVideoId(watchMatch[1]);
-      setLoading(false);
-      return;
+// ── مساعد: استخراج videoId + start + end من رابط YouTube ──
+function parseYouTubeUrl(url: string): {
+  videoId: string | null;
+  startTime: number;
+  endTime: number;
+  cleanUrl: string;
+} {
+  try {
+    const u = new URL(url);
+    let videoId = u.searchParams.get("v");
+    if (!videoId && u.hostname === "youtu.be") {
+      videoId = u.pathname.slice(1, 12) || null;
     }
-
-    // youtu.be/
-    const shortMatch = url.match(/youtu\.be\/([\w-]{11})/);
-    if (shortMatch) {
-      setVideoId(shortMatch[1]);
-      setLoading(false);
-      return;
-    }
-
-    // YouTube Clip — نجيب videoId من thumbnail_url في oEmbed
-    const clipMatch = url.match(/youtube\.com\/clip\/([\w-]+)/);
-    if (clipMatch) {
-      fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`)
-        .then((r) => {
-          if (!r.ok) throw new Error("oEmbed failed");
-          return r.json();
-        })
-        .then((data: any) => {
-          // thumbnail_url: https://i.ytimg.com/vi/VIDEO_ID/hqdefault.jpg
-          const thumbMatch = data?.thumbnail_url?.match(/\/vi\/([\w-]{11})\//);
-          if (thumbMatch) {
-            setVideoId(thumbMatch[1]);
-            // نحاول نجيب التوقيت من الـ html أيضاً
-            const html: string = data?.html ?? "";
-            const startMatch = html.match(/start=(\d+)/);
-            const endMatch   = html.match(/end=(\d+)/);
-            if (startMatch) setStartSec(parseInt(startMatch[1]));
-            if (endMatch)   setEndSec(parseInt(endMatch[1]));
-          } else {
-            setError(true);
-          }
-        })
-        .catch(() => setError(true))
-        .finally(() => setLoading(false));
-      return;
-    }
-
-    setError(true);
-    setLoading(false);
-  }, [url, clipId]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
+    const startTime = parseInt(u.searchParams.get("start") ?? "0") || 0;
+    const endTime   = parseInt(u.searchParams.get("end")   ?? "0") || 0;
+    const cleanUrl  = videoId
+      ? `https://www.youtube.com/watch?v=${videoId}`
+      : url;
+    return { videoId, startTime, endTime, cleanUrl };
+  } catch {
+    return { videoId: null, startTime: 0, endTime: 0, cleanUrl: url };
   }
+}
 
-  if (error || !videoId) {
+// ── مكوّن المشغل المبسَّط ────────────────────────────────────
+// الآن الروابط في قاعدة البيانات كلها بصيغة watch?v= مع start/end
+// لذا لا حاجة لاستدعاء oEmbed — نقرأ القيم من الرابط مباشرة
+function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
+  const { videoId, startTime, endTime, cleanUrl } = parseYouTubeUrl(url);
+
+  if (!videoId) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
         <p className="text-sm">تعذّر تحميل الفيديو</p>
@@ -97,14 +58,10 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
     );
   }
 
-  const playerUrl = startSec > 0
-    ? `https://www.youtube.com/watch?v=${videoId}&t=${startSec}`
-    : `https://www.youtube.com/watch?v=${videoId}`;
-
   return (
     <ReactPlayer
-      key={playerUrl}
-      url={playerUrl}
+      key={`${clipId}-${url}`}
+      url={cleanUrl}
       width="100%"
       height="100%"
       controls
@@ -112,9 +69,10 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
       config={{
         youtube: {
           playerVars: {
-            start: startSec || 0,
-            ...(endSec > 0 ? { end: endSec } : {}),
-            rel: 0,
+            // ✅ يجبر المشغل على البدء والانتهاء عند اللقطة المحددة
+            start:          startTime || 0,
+            ...(endTime > 0 ? { end: endTime } : {}),
+            rel:            0,
             modestbranding: 1,
           },
         },
@@ -123,12 +81,14 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
   );
 }
 
-
 export default function Studio() {
   const { data: user, isLoading: isAuthLoading } = useUser();
   const [, navigate] = useLocation();
 
-  const { data: clips = [], isLoading, error } = useClips({ status: "pending", sort: "new" });
+  const { data: clips = [], isLoading, error } = useClips({
+    status: "pending",
+    sort: "new",
+  });
   const updateStatus = useUpdateClipStatus();
   const [current, setCurrent] = useState(0);
 
@@ -169,7 +129,9 @@ export default function Studio() {
   return (
     <Layout>
       <div className="max-w-6xl mx-auto">
-        <h1 className="text-2xl font-bold mb-6 text-right">لوحة التحكم — مراجعة المقاطع</h1>
+        <h1 className="text-2xl font-bold mb-6 text-right">
+          لوحة التحكم — مراجعة المقاطع
+        </h1>
 
         {isLoading ? (
           <div className="flex justify-center py-20">
@@ -206,7 +168,10 @@ export default function Studio() {
                     </div>
 
                     <div className="flex gap-2">
-                      <Button variant="destructive" onClick={() => handleDecision("rejected")}>
+                      <Button
+                        variant="destructive"
+                        onClick={() => handleDecision("rejected")}
+                      >
                         <X className="w-4 h-4 ml-1" /> رفض
                       </Button>
                       <Button
@@ -227,7 +192,9 @@ export default function Studio() {
 
             {/* قائمة الانتظار */}
             <div className="bg-card border border-border/50 rounded-xl p-4">
-              <h3 className="font-semibold mb-3 text-right">قائمة الانتظار ({clips.length})</h3>
+              <h3 className="font-semibold mb-3 text-right">
+                قائمة الانتظار ({clips.length})
+              </h3>
               <ScrollArea className="h-[400px]">
                 <div className="space-y-2">
                   {clips.map((clip, index) => (
@@ -251,7 +218,9 @@ export default function Studio() {
                             className="w-full h-full object-cover"
                           />
                         ) : (
-                          <span className="text-xs text-muted-foreground">...</span>
+                          <span className="text-xs text-muted-foreground">
+                            ...
+                          </span>
                         )}
                       </div>
                       <div className="flex-1 min-w-0 text-right">

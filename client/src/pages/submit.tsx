@@ -174,7 +174,10 @@ export default function SubmitPage() {
                 {/* Tag Selection */}
                 <div className="space-y-2">
                   <Label htmlFor="tag">Clip Category</Label>
-                  <Select onValueChange={(val) => form.setValue("tag", val)}>
+                  <Select 
+                    value={form.watch("tag")} 
+                    onValueChange={(val) => form.setValue("tag", val, { shouldValidate: true })}
+                  >
                     <SelectTrigger className="bg-background/50 border-border h-12">
                       <SelectValue placeholder="Select a category" />
                     </SelectTrigger>

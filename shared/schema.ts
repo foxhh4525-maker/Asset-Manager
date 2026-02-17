@@ -68,10 +68,20 @@ export const votesRelations = relations(votes, ({ one }) => ({
 
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
-export const insertClipSchema = createInsertSchema(clips).omit({ 
+
+// For clips, we need to specify which fields are required vs optional
+const baseClipSchema = createInsertSchema(clips).omit({ 
   id: true, 
   createdAt: true 
 });
+
+export const insertClipSchema = baseClipSchema.extend({
+  submittedBy: z.number().int().optional(),
+  status: z.enum(["pending", "approved", "rejected", "watched"]).optional(),
+  upvotes: z.number().int().min(0).optional(),
+  downvotes: z.number().int().min(0).optional(),
+});
+
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true });
 
 // Types

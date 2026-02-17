@@ -109,7 +109,7 @@ export default function SubmitPage() {
                   <AlertDescription>
                     You must be logged in to submit a clip.
                     <Button 
-                      variant="link" 
+                      variant="secondary"
                       className="ml-2 p-0 h-auto text-destructive hover:text-destructive/90"
                       onClick={login}
                     >

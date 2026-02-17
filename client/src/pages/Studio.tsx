@@ -34,18 +34,16 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
       return;
     }
 
-    // روابط Clip: نجيب videoId من السيرفر
+    // روابط Clip: نحل مباشرة من المتصفح عبر YouTube oEmbed
     const clipMatch = url.match(/youtube\.com\/clip\/([\w-]+)/);
     if (clipMatch) {
-      fetch(`/api/youtube/resolve-clip?url=${encodeURIComponent(url)}`)
+      fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`)
         .then((r) => r.json())
-        .then((data) => {
-          if (data.videoId) {
-            // نبني الرابط مع وقت البداية والنهاية الدقيق للكليب
-            let src = `https://www.youtube.com/embed/${data.videoId}?autoplay=0`;
-            if (data.startTime) src += `&start=${data.startTime}`;
-            if (data.endTime)   src += `&end=${data.endTime}`;
-            setEmbedSrc(src);
+        .then((data: any) => {
+          const srcMatch = data?.html?.match(/src="([^"]+)"/);
+          if (srcMatch) {
+            const rawSrc = srcMatch[1].replace(/&amp;/g, "&");
+            setEmbedSrc(rawSrc);
           } else {
             setError(true);
           }

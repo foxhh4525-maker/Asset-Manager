@@ -7,6 +7,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import SubmitPage from "@/pages/submit";
 import Dashboard from "@/pages/dashboard";
+import Studio from "@/pages/Studio";
 
 function Router() {
   return (
@@ -14,6 +15,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/submit" component={SubmitPage} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/studio" component={Studio} />
       {/* Fallback to 404 */}
       <Route component={NotFound} />
     </Switch>

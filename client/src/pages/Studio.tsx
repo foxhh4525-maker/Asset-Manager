@@ -3,13 +3,14 @@ import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
 import { Layout } from "@/components/layout";
 import ReactPlayer from "react-player";
 import { Button } from "@/components/ui/button";
-import { Check, X } from "lucide-react";
+import { Check, X, AlertCircle, Loader2 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Studio() {
-  const { data: clips = [], isLoading } = useClips({ status: "pending", sort: "new" });
+  const { data: clips = [], isLoading, error } = useClips({ status: "pending", sort: "new" });
   const updateStatus = useUpdateClipStatus();
   const [current, setCurrent] = useState(0);
 
@@ -18,8 +19,36 @@ export default function Studio() {
   const handleDecision = async (status: "approved" | "rejected") => {
     if (!currentClip) return;
     await updateStatus.mutateAsync({ id: currentClip.id, status });
-    setCurrent((c) => Math.min((clips?.length || 1) - 1, c + 1));
+    setCurrent((c) => Math.min(Math.max(0, (clips?.length || 1) - 2), c));
   };
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex h-96 items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">جاري تحميل المقاطع...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (error) {
+    return (
+      <Layout>
+        <div className="max-w-6xl mx-auto">
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              خطأ في جلب المقاطع: {error instanceof Error ? error.message : "حدث خطأ غير متوقع"}
+            </AlertDescription>
+          </Alert>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -30,7 +59,7 @@ export default function Studio() {
           <div className="lg:col-span-2 bg-card border border-border/50 rounded-xl p-4">
             {currentClip ? (
               <div className="aspect-video rounded overflow-hidden bg-black">
-                <ReactPlayer {...{ url: currentClip.url } as any} width="100%" height="100%" controls />
+                <ReactPlayer {...{ url: currentClip.url } as any} width="100%" height="100%" controls playing={false} />
               </div>
             ) : (
               <div className="h-64 flex items-center justify-center text-muted-foreground">لا يوجد مقطع حالياً</div>
@@ -62,20 +91,23 @@ export default function Studio() {
             <h3 className="px-3 py-2 font-semibold">قائمة الانتظار ({clips?.length || 0})</h3>
             <ScrollArea className="h-96">
               <div className="space-y-2 p-2">
-                {clips.map((c: any, i: number) => (
-                  <motion.div
-                    key={c.id}
-                    onClick={() => setCurrent(i)}
-                    className={`p-2 rounded cursor-pointer flex items-center gap-2 border ${i === current ? 'border-primary/40 bg-primary/5' : 'hover:bg-white/5'}`}>
-                    <img src={c.thumbnailUrl} className="w-20 aspect-video object-cover rounded" />
-                    <div className="min-w-0">
-                      <div className="text-sm font-medium truncate">{c.title}</div>
-                      <div className="text-xs text-muted-foreground">{c.submitter?.username}</div>
-                    </div>
-                  </motion.div>
-                ))}
-
-                {clips.length === 0 && (
+                {clips && clips.length > 0 ? (
+                  clips.map((c: any, i: number) => (
+                    <motion.div
+                      key={c.id}
+                      onClick={() => setCurrent(i)}
+                      className={`p-2 rounded cursor-pointer flex items-center gap-2 border transition-all ${
+                        i === current ? 'border-primary/40 bg-primary/5' : 'hover:bg-white/5 border-border/30'
+                      }`}
+                    >
+                      <img src={c.thumbnailUrl} alt={c.title} className="w-20 aspect-video object-cover rounded" />
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{c.title}</div>
+                        <div className="text-xs text-muted-foreground">{c.submitter?.username}</div>
+                      </div>
+                    </motion.div>
+                  ))
+                ) : (
                   <div className="p-4 text-center text-muted-foreground">لا توجد مقاطع في الانتظار</div>
                 )}
               </div>

@@ -8,11 +8,30 @@ import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
+import express from "express";
+import path from "path";
+import { existsSync, mkdirSync } from "fs";
+import {
+  downloadAndStoreVideo,
+  VIDEOS_DIR,
+  getLocalVideoUrl,
+  getLocalVideoPath,
+} from "./VideoDownloadr";
+import { storage as st } from "./storage";
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // ── تقديم الفيديوهات المحلية ──────────────────────────────
+  if (!existsSync(VIDEOS_DIR)) mkdirSync(VIDEOS_DIR, { recursive: true });
+  app.use("/api/videos", express.static(VIDEOS_DIR, {
+    setHeaders: (res) => {
+      res.set("Accept-Ranges", "bytes");
+      res.set("Cache-Control", "public, max-age=86400");
+    },
+  }));
+
   const PgSession = connectPgSimple(session as any);
   const isProd = process.env.NODE_ENV === "production";
   const trustProxy = !!process.env.TRUST_PROXY || isProd;
@@ -266,6 +285,26 @@ export async function registerRoutes(
         downvotes: 0,
         status:    "pending",
       });
+
+      // ── تحميل الفيديو في الخلفية ────────────────────────
+      if (metadata.videoId) {
+        (async () => {
+          try {
+            const { localUrl } = await downloadAndStoreVideo(
+              metadata.videoId,
+              metadata.startTime,
+              metadata.endTime
+            );
+            if (localUrl) {
+              await storage.updateClipUrl(clip.id, localUrl);
+              console.log(`[clip ${clip.id}] video stored: ${localUrl}`);
+            }
+          } catch (e) {
+            console.warn(`[clip ${clip.id}] background download failed:`, e);
+          }
+        })();
+      }
+
       res.status(201).json(clip);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -329,6 +368,49 @@ export async function registerRoutes(
     await storage.updateClipVotes(clipId);
     const clip = await storage.getClip(clipId);
     res.json({ upvotes: clip?.upvotes || 0, downvotes: clip?.downvotes || 0 });
+  });
+
+  // ── إعادة تحميل كل الكليبات المكسورة (للأدمن) ────────────
+  app.post("/api/admin/redownload-clips", async (req, res) => {
+    if (!req.isAuthenticated() || (req.user as any)?.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    // جلب كل الكليبات التي رابطها يوتيوب (مش محلي)
+    const clips = await storage.getClips({ status: "approved", sort: "new" });
+    const pending = clips.filter(
+      (c: any) => !c.url?.startsWith("/api/videos/")
+    );
+    res.json({ total: pending.length, message: "Re-download started in background" });
+
+    // معالجة في الخلفية
+    (async () => {
+      for (const clip of pending as any[]) {
+        try {
+          const parsed = (() => {
+            try {
+              const u = new URL(clip.url);
+              const videoId = u.searchParams.get("v") || null;
+              const start = parseInt(u.searchParams.get("start") ?? "0") || 0;
+              const end   = parseInt(u.searchParams.get("end")   ?? "0") || 0;
+              return { videoId, start, end };
+            } catch { return { videoId: null, start: 0, end: 0 }; }
+          })();
+
+          if (!parsed.videoId) continue;
+
+          const { localUrl } = await downloadAndStoreVideo(
+            parsed.videoId, parsed.start, parsed.end
+          );
+          if (localUrl) {
+            await storage.updateClipUrl(clip.id, localUrl);
+            console.log(`[redownload] clip ${clip.id} -> ${localUrl}`);
+          }
+        } catch (e) {
+          console.warn(`[redownload] clip ${(clip as any).id} failed:`, e);
+        }
+      }
+      console.log("[redownload] All done.");
+    })();
   });
 
   app.post(api.clips.fetchMetadata.path, async (req, res) => {

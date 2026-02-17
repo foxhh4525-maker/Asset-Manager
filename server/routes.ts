@@ -8,8 +8,6 @@ import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 import passport from "passport";
 import { Strategy as DiscordStrategy } from "passport-discord";
-import fs from "fs";
-import path from "path";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -24,15 +22,8 @@ export async function registerRoutes(
   const cookieSecure = isProd || publicUrl.startsWith("https://");
   const cookieSameSite: any = cookieSecure ? "none" : "lax";
 
-  // Configure session store. Prefer Postgres-backed store when `pool` is
-  // available, and create the table automatically if it's missing so the
-  // app works even when migrations haven't been applied yet. If no DB
-  // connection is available, fall back to the in-memory store so the
-  // server keeps running (useful for local demo mode).
   let store: any;
   if (pool) {
-    // Ensure the `session` table exists before creating the PG-backed store.
-    // This makes the app resilient when migrations haven't run yet.
     try {
       const client = await pool.connect();
       try {
@@ -59,21 +50,14 @@ export async function registerRoutes(
         client.release();
       }
     } catch (e: any) {
-      // Don't fail startup if we can't ensure the table; the session store
-      // may still try to create it if supported, or the in-memory fallback
-      // will be used in the absence of a pool.
       console.warn("Could not ensure session table exists:", e?.message || e);
     }
     store = new PgSession({
       pool,
       tableName: "session",
-      // Ensure the session table is created automatically when missing.
-      // This is safe and idempotent; migrations are still recommended
-      // for production deployments but this prevents runtime failures.
       createTableIfMissing: true,
     });
 
-    // Log store errors for troubleshooting
     store.on && store.on("error", (err: any) => {
       console.error("Session store error:", err);
     });
@@ -93,7 +77,7 @@ export async function registerRoutes(
       proxy: trustProxy,
       cookie: {
         httpOnly: true,
-        secure: cookieSecure, // secure cookies when running under HTTPS
+        secure: cookieSecure,
         sameSite: cookieSameSite,
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       },
@@ -110,14 +94,13 @@ export async function registerRoutes(
         {
           clientID: process.env.DISCORD_CLIENT_ID,
           clientSecret: process.env.DISCORD_CLIENT_SECRET,
-          // Use the exact, lowercase callback URL required by Discord
           callbackURL: "https://asset-manager--hichamadmin.replit.app/api/auth/callback/discord",
           scope: ["identify", "email"],
         },
         async (accessToken, refreshToken, profile, done) => {
           try {
             let user = await storage.getUserByDiscordId(profile.id);
-            
+
             if (!user) {
               user = await storage.createUser({
                 discordId: profile.id,
@@ -128,7 +111,7 @@ export async function registerRoutes(
                 role: "user",
               } as any);
             }
-            
+
             done(null, user);
           } catch (error) {
             done(error);
@@ -137,43 +120,39 @@ export async function registerRoutes(
       )
     );
 
-    // Discord OAuth routes
     app.get(
       "/api/auth/discord",
       passport.authenticate("discord", { scope: ["identify", "email"] })
     );
 
-    // Discord will redirect to this exact path, ensure it matches the app settings
     app.get(
       "/api/auth/callback/discord",
       passport.authenticate("discord", { failureRedirect: "/" }),
       (req, res) => {
-        // User is now authenticated, ensure session is saved
-          req.session?.save((err) => {
-            if (err) {
-              console.error("Session save error:", err);
-              return res.redirect("/");
-            }
+        req.session?.save((err) => {
+          if (err) {
+            console.error("Session save error:", err);
+            return res.redirect("/");
+          }
 
-            // Confirm session persisted (for debugging)
-            try {
-              console.log("Authenticated user id:", (req.user as any)?.id);
-              console.log("Session ID:", (req.session as any)?.id || (req.sessionID as any));
-            } catch (e) {}
+          try {
+            console.log("Authenticated user id:", (req.user as any)?.id);
+            console.log("Session ID:", (req.session as any)?.id || (req.sessionID as any));
+          } catch (e) {}
 
-            // Smart redirect based on user role
-            const user = req.user as any;
-            const redirectPath = user?.role === "streamer" ? "/dashboard" : "/";
+          // ✅ توجيه الأدمن مباشرةً للاستديو بعد تسجيل الدخول
+          const user = req.user as any;
+          let redirectPath = "/";
+          if (user?.role === "admin") redirectPath = "/studio";
+          else if (user?.role === "streamer") redirectPath = "/dashboard";
 
-            // Add cache-busting query parameter to force refresh
-            res.redirect(`${redirectPath}?auth=${Date.now()}`);
-          });
+          res.redirect(`${redirectPath}?auth=${Date.now()}`);
+        });
       }
     );
   } else {
-    // Mock Auth for Development (when Discord credentials are not configured)
+    // Mock Auth for Development
     app.get("/api/auth/discord", async (req, res) => {
-      // Create or get a mock user
       let user = await storage.getUserByUsername("StreamerDemo");
       if (!user) {
         user = await storage.createUser({
@@ -183,7 +162,7 @@ export async function registerRoutes(
           role: "streamer",
         } as any);
       }
-      
+
       req.login(user, (err) => {
         if (err) return res.status(500).send("Login failed");
         return res.redirect("/");
@@ -192,7 +171,6 @@ export async function registerRoutes(
   }
 
   app.post("/api/auth/mock-login", async (req, res) => {
-    // Create or get a mock user
     let user = await storage.getUserByUsername("StreamerDemo");
     if (!user) {
       user = await storage.createUser({
@@ -202,7 +180,7 @@ export async function registerRoutes(
         role: "streamer",
       } as any);
     }
-    
+
     req.login(user, (err) => {
       if (err) return res.status(500).json({ message: "Login failed" });
       return res.json(user);
@@ -247,9 +225,6 @@ export async function registerRoutes(
 
     try {
       const input = api.clips.create.input.parse(req.body);
-      
-      // Fetch metadata (Mocked for now)
-      // TODO: Replace with real YouTube API call
       const metadata = await mockYouTubeMetadata(input.url);
 
       const clip = await storage.createClip({
@@ -273,16 +248,21 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ حماية مسار updateStatus — فقط الأدمن يقدر يغير الحالة
   app.patch(api.clips.updateStatus.path, async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
-    // In real app, check if user is streamer/moderator
-    
+
+    const user = req.user as any;
+    if (user.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden: Admins only" });
+    }
+
     const { status } = req.body;
     const clipId = parseInt(req.params.id);
     const updated = await storage.updateClipStatus(clipId, status);
-    
+
     if (!updated) return res.status(404).json({ message: "Clip not found" });
     res.json(updated);
   });
@@ -300,10 +280,8 @@ export async function registerRoutes(
 
     if (existingVote) {
       if (existingVote.value === value) {
-        // Toggle off (remove vote)
         await storage.deleteVote(existingVote.id);
       } else {
-        // Change vote
         await storage.updateVote(existingVote.id, value);
       }
     } else {
@@ -311,8 +289,7 @@ export async function registerRoutes(
     }
 
     await storage.updateClipVotes(clipId);
-    
-    // Return new counts
+
     const clip = await storage.getClip(clipId);
     res.json({ upvotes: clip?.upvotes || 0, downvotes: clip?.downvotes || 0 });
   });
@@ -327,37 +304,23 @@ export async function registerRoutes(
     }
   });
 
-  // Ensure /studio route is handled so direct visits don't 404
-  const studioHandler = (req: any, res: any) => {
-    if (process.env.NODE_ENV === "production") {
-      try {
-        const distIndex = path.resolve(__dirname, "../client/index.html");
-        if (fs.existsSync(distIndex)) return res.sendFile(distIndex);
-      } catch (e) {
-        // ignore and fallthrough to redirect
-      }
-      return res.redirect("/");
-    }
-    return res.redirect("/");
-  };
-
-  app.get(/^\/studio(\/.*)?$/, studioHandler);
+  // ✅ تم حذف studioHandler الذي كان يعيد التوجيه لـ /
+  // Vite يتعامل مع client-side routing تلقائياً في بيئة التطوير
+  // وفي الإنتاج، vite.ts يعيد index.html لكل المسارات غير المعروفة
 
   return httpServer;
 }
 
 // Mock Helper
 async function mockYouTubeMetadata(url: string) {
-  // Simulate delay
   await new Promise(r => setTimeout(r, 500));
-  
-  // Basic Regex to extract ID (very rough)
+
   const idMatch = url.match(/clip\/([a-zA-Z0-9_-]+)/);
   const id = idMatch ? idMatch[1] : "unknown";
 
   return {
     title: `Amazing Clip #${id.substring(0, 5)}`,
-    thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, // This might not work for clips directly, but good placeholder
+    thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
     channelName: "Random Streamer",
     duration: "0:30",
   };

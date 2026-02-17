@@ -12,10 +12,10 @@ export function useUser() {
       return await res.json();
     },
     retry: false,
-    // ✅ الإصلاح الحاسم: لا نخزّن بيانات المستخدم إلى الأبد
-    // staleTime: Infinity كان في queryClient يجعل الدور القديم يبقى محفوظاً حتى بعد تغييره في DB
+    // ✅ الإصلاح الحاسم: staleTime: 0 يجعل React تجلب بيانات المستخدم من السيرفر
+    // في كل مرة بدلاً من الاعتماد على الكاش — يضمن تحديث الدور فوراً بعد تغييره في DB
     staleTime: 0,
-    // ✅ إعادة جلب بيانات المستخدم عند العودة للتبويب — يضمن تحديث الدور فوراً
+    // ✅ إعادة الجلب عند العودة للتبويب
     refetchOnWindowFocus: true,
   });
 }
@@ -33,22 +33,19 @@ export function useLogout() {
       if (!res.ok) throw new Error("Failed to logout");
     },
     onSuccess: () => {
-      queryClient.setQueryData([api.auth.me.path], null);
-      // ✅ مسح كل الـ cache بعد الخروج لضمان بيانات نظيفة عند الدخول مجدداً
+      // ✅ مسح كل الكاش عند تسجيل الخروج
       queryClient.clear();
       toast({
-        title: "Logged out",
-        description: "See you next time, legend!",
+        title: "تم تسجيل الخروج",
+        description: "إلى اللقاء!",
       });
     },
   });
 }
 
-// Discord OAuth login
 export function useLogin() {
   const login = () => {
     window.location.href = "/api/auth/discord";
   };
-
   return { login };
 }

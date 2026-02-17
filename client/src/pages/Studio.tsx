@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
+import { useUser } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
+import { useLocation } from "wouter";
 import ReactPlayer from "react-player";
 import { Button } from "@/components/ui/button";
-import { Check, X, AlertCircle, Loader2 } from "lucide-react";
+import { Check, X, AlertCircle, Loader2, ShieldAlert } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function Studio() {
-  // جلب المقاطع التي حالتها "pending" (بانتظار المراجعة)
+  const { data: user, isLoading: isAuthLoading } = useUser();
+  const [, navigate] = useLocation();
+
   const { data: clips = [], isLoading, error } = useClips({ status: "pending", sort: "new" });
   const updateStatus = useUpdateClipStatus();
   const [current, setCurrent] = useState(0);
@@ -21,13 +25,45 @@ export default function Studio() {
     if (!currentClip) return;
     try {
       await updateStatus.mutateAsync({ id: currentClip.id, status });
-      // الانتقال للمقطع التالي تلقائياً بعد القرار
       setCurrent((c) => Math.min(Math.max(0, (clips?.length || 1) - 2), c));
     } catch (err) {
       console.error("Error updating status:", err);
     }
   };
 
+  // ✅ التحقق من تحميل بيانات المستخدم أولاً
+  if (isAuthLoading) {
+    return (
+      <Layout>
+        <div className="flex h-96 items-center justify-center">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">جاري التحقق من الصلاحيات...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // ✅ حماية الصفحة — يُسمح فقط للأدمن
+  if (!user || user.role !== "admin") {
+    return (
+      <Layout>
+        <div className="max-w-md mx-auto mt-20 text-center">
+          <div className="flex flex-col items-center gap-4">
+            <ShieldAlert className="w-16 h-16 text-destructive opacity-80" />
+            <h2 className="text-2xl font-bold">غير مصرح بالدخول</h2>
+            <p className="text-muted-foreground">
+              هذه الصفحة مخصصة للمشرفين فقط.
+            </p>
+            <Button onClick={() => navigate("/")}>العودة للرئيسية</Button>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // حالة التحميل
   if (isLoading) {
     return (
       <Layout>
@@ -67,14 +103,13 @@ export default function Studio() {
             {currentClip ? (
               <>
                 <div className="aspect-video rounded overflow-hidden bg-black">
-                  {/* تم استخدام key لإجبار المشغل على التحديث عند تغيير الفيديو */}
-                  <ReactPlayer 
+                  <ReactPlayer
                     key={currentClip.id}
-                    url={currentClip.url} 
-                    width="100%" 
-                    height="100%" 
-                    controls 
-                    playing={false} 
+                    url={currentClip.url}
+                    width="100%"
+                    height="100%"
+                    controls
+                    playing={false}
                   />
                 </div>
 
@@ -83,7 +118,6 @@ export default function Studio() {
                     <h2 className="text-lg font-semibold">{currentClip.title}</h2>
                     <div className="flex items-center gap-2 mt-2">
                       <Badge variant="outline">{currentClip.tag}</Badge>
-                      {/* هنا كان الخطأ: أضفنا حماية || لعرض "مجهول" إذا لم يوجد اسم */}
                       <span className="text-sm text-muted-foreground">
                         من: {currentClip.submitter?.username || "مستخدم مجهول"}
                       </span>
@@ -118,16 +152,23 @@ export default function Studio() {
                       key={c.id}
                       onClick={() => setCurrent(i)}
                       className={`p-2 rounded cursor-pointer flex items-center gap-2 border transition-all ${
-                        i === current ? 'border-primary/40 bg-primary/5' : 'hover:bg-white/5 border-border/30'
+                        i === current
+                          ? "border-primary/40 bg-primary/5"
+                          : "hover:bg-white/5 border-border/30"
                       }`}
                     >
-                      {/* عرض صورة مصغرة افتراضية في حال عدم وجودها */}
                       <div className="w-20 h-12 bg-black/20 rounded overflow-hidden flex-shrink-0">
-                         {c.thumbnailUrl ? (
-                            <img src={c.thumbnailUrl} alt={c.title} className="w-full h-full object-cover" />
-                         ) : (
-                            <div className="w-full h-full flex items-center justify-center text-xs">فيديو</div>
-                         )}
+                        {c.thumbnailUrl ? (
+                          <img
+                            src={c.thumbnailUrl}
+                            alt={c.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-xs">
+                            فيديو
+                          </div>
+                        )}
                       </div>
 
                       <div className="min-w-0">
@@ -139,7 +180,9 @@ export default function Studio() {
                     </motion.div>
                   ))
                 ) : (
-                  <div className="p-4 text-center text-muted-foreground">لا توجد مقاطع في الانتظار</div>
+                  <div className="p-4 text-center text-muted-foreground">
+                    لا توجد مقاطع في الانتظار
+                  </div>
                 )}
               </div>
             </ScrollArea>

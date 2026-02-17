@@ -1,19 +1,22 @@
 import { Link, useLocation } from "wouter";
 import { useUser, useLogout } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { 
-  Gamepad2, 
-  LogOut, 
-  Plus, 
-  User as UserIcon, 
+import {
+  Gamepad2,
+  LogOut,
+  Plus,
   MonitorPlay,
   Menu,
-  X
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { data: user, isLoading, refetch } = useUser();
@@ -21,26 +24,42 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Refetch user data when redirected from Discord auth callback
+  // إعادة جلب بيانات المستخدم عند العودة من Discord auth
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.has("auth")) {
-      // User was just authenticated, refetch user data
       refetch();
-      // Clean up the URL parameter
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [refetch]);
 
-  const NavLink = ({ href, icon: Icon, children }: { href: string; icon: any; children: React.ReactNode }) => {
+  const isAdmin = user?.role === "admin";
+
+  const NavLink = ({
+    href,
+    icon: Icon,
+    children,
+    onClick,
+  }: {
+    href: string;
+    icon: any;
+    children: React.ReactNode;
+    onClick?: () => void;
+  }) => {
     const isActive = location === href;
     return (
-      <Link href={href} className={`
-        flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium
-        ${isActive 
-          ? "bg-primary/10 text-primary shadow-[0_0_15px_rgba(168,85,247,0.15)]" 
-          : "text-muted-foreground hover:text-foreground hover:bg-white/5"}
-      `}>
+      <Link
+        href={href}
+        onClick={onClick}
+        className={`
+          flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 font-medium
+          ${
+            isActive
+              ? "bg-primary/10 text-primary shadow-[0_0_15px_rgba(168,85,247,0.15)]"
+              : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+          }
+        `}
+      >
         <Icon className="w-5 h-5" />
         {children}
       </Link>
@@ -66,8 +85,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-2">
             <NavLink href="/" icon={Gamepad2}>الرسوم</NavLink>
-            {user?.role === "admin" && (
-              <NavLink href="/studio" icon={MonitorPlay}>لوحة التحكم</NavLink>
+            {/* ✅ رابط الاستوديو في شريط التنقل العلوي — للأدمن فقط */}
+            {isAdmin && (
+              <NavLink href="/studio" icon={MonitorPlay}>الاستوديو</NavLink>
             )}
           </div>
 
@@ -83,20 +103,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     إرسال مقطع
                   </Button>
                 </Link>
-                
+
                 <DropdownMenu>
                   <DropdownMenuTrigger className="focus:outline-none">
                     <Avatar className="w-9 h-9 border-2 border-primary/20 hover:border-primary transition-colors cursor-pointer">
                       <AvatarImage src={user.avatarUrl || undefined} />
-                      <AvatarFallback className="bg-muted text-xs">{user.username.slice(0, 2).toUpperCase()}</AvatarFallback>
+                      <AvatarFallback className="bg-muted text-xs">
+                        {user.username.slice(0, 2).toUpperCase()}
+                      </AvatarFallback>
                     </Avatar>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="w-56 bg-card border-border/50">
                     <div className="px-2 py-1.5 text-sm font-semibold text-foreground">
                       {user.username}
-                      <span className="block text-xs font-normal text-muted-foreground capitalize">{user.role === "admin" ? "مشرف" : user.role === "streamer" ? "منِتِج محتوى" : "مستخدم"}</span>
+                      <span className="block text-xs font-normal text-muted-foreground capitalize">
+                        {isAdmin ? "مشرف" : user.role === "streamer" ? "منِتِج محتوى" : "مستخدم"}
+                      </span>
                     </div>
-                    <DropdownMenuItem className="text-destructive focus:text-destructive cursor-pointer" onClick={() => logout.mutate()}>
+                    <DropdownMenuItem
+                      className="text-destructive focus:text-destructive cursor-pointer"
+                      onClick={() => logout.mutate()}
+                    >
                       <LogOut className="w-4 h-4 ml-2" />
                       تسجيل الخروج
                     </DropdownMenuItem>
@@ -104,10 +131,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </DropdownMenu>
               </div>
             ) : (
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 className="hover:bg-primary/10 hover:text-primary"
-                onClick={() => window.location.href = "/api/auth/discord"}
+                onClick={() => (window.location.href = "/api/auth/discord")}
               >
                 تسجيل الدخول عبر ديسكورد
               </Button>
@@ -122,12 +149,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="bg-card border-l border-border/50">
-              <div className="flex flex-col gap-6 mt-8">
-                <NavLink href="/" icon={Gamepad2}>الرسوم</NavLink>
-                {user?.role === "admin" && (
-                  <NavLink href="/studio" icon={MonitorPlay}>لوحة التحكم</NavLink>
+              <div className="flex flex-col gap-4 mt-8">
+
+                {/* ✅ روابط التنقل في القائمة المتنقلة */}
+                <NavLink href="/" icon={Gamepad2} onClick={() => setIsMobileOpen(false)}>
+                  الرسوم
+                </NavLink>
+
+                {/* ✅ رابط الاستوديو في القائمة المتنقلة — للأدمن فقط */}
+                {isAdmin && (
+                  <NavLink href="/studio" icon={MonitorPlay} onClick={() => setIsMobileOpen(false)}>
+                    الاستوديو
+                  </NavLink>
                 )}
+
                 <div className="h-px bg-border/50" />
+
                 {user ? (
                   <>
                     <Link href="/submit" onClick={() => setIsMobileOpen(false)}>
@@ -135,12 +172,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         <Plus className="w-4 h-4 ml-2" /> إرسال مقطع
                       </Button>
                     </Link>
-                    <Button variant="destructive" className="w-full" onClick={() => logout.mutate()}>
+                    <Button
+                      variant="destructive"
+                      className="w-full"
+                      onClick={() => {
+                        logout.mutate();
+                        setIsMobileOpen(false);
+                      }}
+                    >
                       <LogOut className="w-4 h-4 ml-2" /> تسجيل الخروج
                     </Button>
                   </>
                 ) : (
-                  <Button className="w-full" onClick={() => window.location.href = "/api/auth/discord"}>
+                  <Button
+                    className="w-full"
+                    onClick={() => (window.location.href = "/api/auth/discord")}
+                  >
                     تسجيل الدخول عبر ديسكورد
                   </Button>
                 )}
@@ -151,9 +198,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </nav>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-8">
-        {children}
-      </main>
+      <main className="flex-1 container mx-auto px-4 py-8">{children}</main>
 
       {/* Footer */}
       <footer className="border-t border-border/40 py-8 mt-auto bg-black/20">

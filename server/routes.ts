@@ -125,17 +125,14 @@ export async function registerRoutes(
             return res.redirect("/");
           }
           const user = req.user as any;
-          // ✅ توجيه الأدمن لـ /studio مباشرةً بعد تسجيل الدخول
           let redirectPath = "/";
           if (user?.role === "admin") redirectPath = "/studio";
           else if (user?.role === "streamer") redirectPath = "/dashboard";
-
           res.redirect(`${redirectPath}?auth=${Date.now()}`);
         });
       }
     );
   } else {
-    // Mock Auth for Development
     app.get("/api/auth/discord", async (req, res) => {
       let user = await storage.getUserByUsername("StreamerDemo");
       if (!user) {
@@ -174,16 +171,68 @@ export async function registerRoutes(
   });
 
   passport.deserializeUser(async (id: number, done) => {
+    // ✅ يجلب المستخدم من قاعدة البيانات في كل طلب — يضمن أن الدور دائماً محدّث
     const user = await storage.getUser(id);
     done(null, user);
   });
 
-  // Auth Routes
+  // ─── Auth Routes ───────────────────────────────────────────
+
   app.get(api.auth.me.path, (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
     }
     res.json(req.user);
+  });
+
+  // ✅ Endpoint مؤقت للتشخيص — يُظهر بيانات المستخدم الكاملة بما فيها الدور
+  app.get("/api/debug/me", (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.json({ authenticated: false, message: "Not logged in" });
+    }
+    const user = req.user as any;
+    res.json({
+      authenticated: true,
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      discordId: user.discordId,
+      isAdmin: user.role === "admin",
+    });
+  });
+
+  // ✅ Endpoint لترقية الحساب الحالي إلى Admin مباشرةً (استخدم مرة واحدة ثم احذفه)
+  app.post("/api/debug/make-admin", async (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    const user = req.user as any;
+    try {
+      if (!pool) {
+        return res.status(500).json({ message: "No database connection" });
+      }
+      const client = await pool.connect();
+      try {
+        await client.query(
+          `UPDATE users SET role = 'admin' WHERE id = $1`,
+          [user.id]
+        );
+        // تحديث الجلسة الحالية فوراً
+        (req.user as any).role = "admin";
+        req.session.save((err) => {
+          if (err) return res.status(500).json({ message: "Session save failed" });
+          res.json({
+            success: true,
+            message: `✅ تم ترقية ${user.username} إلى admin بنجاح!`,
+            user: { id: user.id, username: user.username, role: "admin" },
+          });
+        });
+      } finally {
+        client.release();
+      }
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
   });
 
   app.post(api.auth.logout.path, (req, res) => {
@@ -193,7 +242,8 @@ export async function registerRoutes(
     });
   });
 
-  // Clips Routes
+  // ─── Clips Routes ──────────────────────────────────────────
+
   app.get(api.clips.list.path, async (req, res) => {
     const { status, sort } = req.query as { status?: string; sort?: string };
     const clips = await storage.getClips({ status, sort });
@@ -227,7 +277,6 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ محمي — فقط الأدمن يقدر يغير حالة المقطع
   app.patch(api.clips.updateStatus.path, async (req, res) => {
     if (!req.isAuthenticated()) {
       return res.status(401).json({ message: "Not authenticated" });
@@ -275,7 +324,7 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ تم حذف studioHandler — كان السبب الرئيسي للمشكلة
+  // ✅ studioHandler محذوف — كان يعيد التوجيه لـ / ويمنع الوصول للصفحة
   // Vite يخدم index.html لكل المسارات غير المعروفة تلقائياً
 
   return httpServer;

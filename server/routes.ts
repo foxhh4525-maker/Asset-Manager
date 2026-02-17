@@ -325,33 +325,64 @@ export async function registerRoutes(
     const { url } = req.query as { url: string };
     if (!url) return res.status(400).json({ message: "URL required" });
     try {
-      // استخراج clipId من الرابط
       const clipMatch = url.match(/clip\/([\w-]+)/);
       if (!clipMatch) return res.status(400).json({ message: "Invalid clip URL" });
       const clipId = clipMatch[1];
 
-      // جلب صفحة الكليب واستخراج بيانات JSON منها
+      const apiKey = process.env.YOUTUBE_API_KEY;
+
+      // الطريقة 1: YouTube oEmbed API (لا يحتاج مفتاح)
+      try {
+        const oembedRes = await fetch(
+          `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`,
+          { headers: { "User-Agent": "Mozilla/5.0" } }
+        );
+        if (oembedRes.ok) {
+          const oembedData = await oembedRes.json() as any;
+          const embedMatch = oembedData?.html?.match(/embed\/([\w-]{11})/);
+          if (embedMatch) {
+            return res.json({ videoId: embedMatch[1], startTime: 0, endTime: 0 });
+          }
+        }
+      } catch (_) {}
+
+      // الطريقة 2: YouTube Data API v3 بالمفتاح
+      if (apiKey) {
+        try {
+          const searchRes = await fetch(
+            `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${clipId}&type=video&key=${apiKey}`,
+            { headers: { "User-Agent": "Mozilla/5.0" } }
+          );
+          if (searchRes.ok) {
+            const searchData = await searchRes.json() as any;
+            if (searchData.items && searchData.items.length > 0) {
+              const videoId = searchData.items[0].id.videoId;
+              if (videoId) return res.json({ videoId, startTime: 0, endTime: 0 });
+            }
+          }
+        } catch (_) {}
+      }
+
+      // الطريقة 3: جلب صفحة YouTube مباشرة
       const pageRes = await fetch(`https://www.youtube.com/clip/${clipId}`, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
           "Accept-Language": "en-US,en;q=0.9",
-          "Accept": "text/html,application/xhtml+xml",
         },
       });
       const html = await pageRes.text();
-
-      // استخراج videoId
       const videoIdMatch = html.match(/"videoDetails":\{"videoId":"([\w-]{11})"/);
-      if (!videoIdMatch) return res.status(404).json({ message: "Could not extract videoId" });
-      const videoId = videoIdMatch[1];
+      if (videoIdMatch) {
+        const startMsMatch = html.match(/"startTimeMs":"(\d+)"/);
+        const endMsMatch   = html.match(/"endTimeMs":"(\d+)"/);
+        return res.json({
+          videoId: videoIdMatch[1],
+          startTime: startMsMatch ? Math.floor(parseInt(startMsMatch[1]) / 1000) : 0,
+          endTime:   endMsMatch   ? Math.floor(parseInt(endMsMatch[1])   / 1000) : 0,
+        });
+      }
 
-      // استخراج وقت البداية والنهاية للكليب (بالميلي ثانية)
-      const startMsMatch = html.match(/"startTimeMs":"(\d+)"/);
-      const endMsMatch   = html.match(/"endTimeMs":"(\d+)"/);
-      const startSec = startMsMatch ? Math.floor(parseInt(startMsMatch[1]) / 1000) : 0;
-      const endSec   = endMsMatch   ? Math.floor(parseInt(endMsMatch[1])   / 1000) : 0;
-
-      return res.json({ videoId, startTime: startSec, endTime: endSec });
+      return res.status(404).json({ message: "Could not resolve clip" });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

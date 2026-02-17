@@ -325,34 +325,33 @@ export async function registerRoutes(
     const { url } = req.query as { url: string };
     if (!url) return res.status(400).json({ message: "URL required" });
     try {
-      // أولاً: جرب YouTube oEmbed — يرجع embed HTML فيه videoId الصحيح
-      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
-      const oembedRes = await fetch(oembedUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
-      if (oembedRes.ok) {
-        const oembedData = await oembedRes.json() as any;
-        const embedHtmlMatch = oembedData?.html?.match(/embed\/([\w-]{11})/);
-        if (embedHtmlMatch) return res.json({ videoId: embedHtmlMatch[1] });
-      }
-      // ثانياً: جلب صفحة الكليب واستخراج videoId الأصلي (مش المقترح)
-      const response = await fetch(url, {
+      // استخراج clipId من الرابط
+      const clipMatch = url.match(/clip\/([\w-]+)/);
+      if (!clipMatch) return res.status(400).json({ message: "Invalid clip URL" });
+      const clipId = clipMatch[1];
+
+      // جلب صفحة الكليب واستخراج بيانات JSON منها
+      const pageRes = await fetch(`https://www.youtube.com/clip/${clipId}`, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
           "Accept-Language": "en-US,en;q=0.9",
+          "Accept": "text/html,application/xhtml+xml",
         },
       });
-      const html = await response.text();
-      // نبحث في videoDetails أو playerMicroformat — هذه تحتوي الفيديو الأصلي
-      const patterns = [
-        /"videoDetails":\{"videoId":"([\w-]{11})"/,
-        /"playerMicroformat":\{[^}]*"videoId":"([\w-]{11})"/,
-        /"currentVideoEndpoint":\{[^}]*"videoId":"([\w-]{11})"/,
-        /"watchEndpoint":\{"videoId":"([\w-]{11})"/,
-      ];
-      for (const pattern of patterns) {
-        const match = html.match(pattern);
-        if (match) return res.json({ videoId: match[1] });
-      }
-      return res.status(404).json({ message: "Could not extract video ID" });
+      const html = await pageRes.text();
+
+      // استخراج videoId
+      const videoIdMatch = html.match(/"videoDetails":\{"videoId":"([\w-]{11})"/);
+      if (!videoIdMatch) return res.status(404).json({ message: "Could not extract videoId" });
+      const videoId = videoIdMatch[1];
+
+      // استخراج وقت البداية والنهاية للكليب (بالميلي ثانية)
+      const startMsMatch = html.match(/"startTimeMs":"(\d+)"/);
+      const endMsMatch   = html.match(/"endTimeMs":"(\d+)"/);
+      const startSec = startMsMatch ? Math.floor(parseInt(startMsMatch[1]) / 1000) : 0;
+      const endSec   = endMsMatch   ? Math.floor(parseInt(endMsMatch[1])   / 1000) : 0;
+
+      return res.json({ videoId, startTime: startSec, endTime: endSec });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });
     }

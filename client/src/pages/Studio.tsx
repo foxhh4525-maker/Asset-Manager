@@ -41,9 +41,11 @@ function YouTubePlayer({ url, clipId }: { url: string; clipId: number }) {
         .then((r) => r.json())
         .then((data) => {
           if (data.videoId) {
-            setEmbedSrc(
-              `https://www.youtube.com/embed/${data.videoId}?clip=${clipMatch[1]}&autoplay=0`
-            );
+            // نبني الرابط مع وقت البداية والنهاية الدقيق للكليب
+            let src = `https://www.youtube.com/embed/${data.videoId}?autoplay=0`;
+            if (data.startTime) src += `&start=${data.startTime}`;
+            if (data.endTime)   src += `&end=${data.endTime}`;
+            setEmbedSrc(src);
           } else {
             setError(true);
           }

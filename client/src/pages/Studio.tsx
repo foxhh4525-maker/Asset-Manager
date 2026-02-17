@@ -3,7 +3,7 @@ import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import { Layout } from "@/components/layout";
 import { useLocation } from "wouter";
-import ReactPlayer from "react-player";
+// ReactPlayer removed — using iframe for YouTube Clips support
 import { Button } from "@/components/ui/button";
 import { Check, X, AlertCircle, Loader2, ShieldAlert } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -103,14 +103,63 @@ export default function Studio() {
             {currentClip ? (
               <>
                 <div className="aspect-video rounded overflow-hidden bg-black">
-                  <ReactPlayer
-                    key={currentClip.id}
-                    url={currentClip.url}
-                    width="100%"
-                    height="100%"
-                    controls
-                    playing={false}
-                  />
+                  {(() => {
+                    const url = currentClip.url;
+                    // YouTube Clip: youtube.com/clip/CLIP_ID
+                    const clipMatch = url.match(/youtube\.com\/clip\/([\w-]+)/);
+                    if (clipMatch) {
+                      return (
+                        <iframe
+                          key={currentClip.id}
+                          src={`https://www.youtube.com/embed/${clipMatch[1]}?clip=${clipMatch[1]}&clipt=EAA`}
+                          width="100%"
+                          height="100%"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          style={{ border: "none" }}
+                        />
+                      );
+                    }
+                    // YouTube watch: youtube.com/watch?v=VIDEO_ID
+                    const watchMatch = url.match(/[?&]v=([\w-]+)/);
+                    if (watchMatch) {
+                      return (
+                        <iframe
+                          key={currentClip.id}
+                          src={`https://www.youtube.com/embed/${watchMatch[1]}`}
+                          width="100%"
+                          height="100%"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          style={{ border: "none" }}
+                        />
+                      );
+                    }
+                    // youtu.be/VIDEO_ID
+                    const shortMatch = url.match(/youtu\.be\/([\w-]+)/);
+                    if (shortMatch) {
+                      return (
+                        <iframe
+                          key={currentClip.id}
+                          src={`https://www.youtube.com/embed/${shortMatch[1]}`}
+                          width="100%"
+                          height="100%"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                          style={{ border: "none" }}
+                        />
+                      );
+                    }
+                    // fallback: open in new tab
+                    return (
+                      <div className="flex items-center justify-center h-full text-muted-foreground flex-col gap-3">
+                        <p className="text-sm">لا يمكن تشغيل الرابط مباشرة</p>
+                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary underline text-sm">
+                          افتح في YouTube
+                        </a>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 <div className="mt-4 flex items-center justify-between">

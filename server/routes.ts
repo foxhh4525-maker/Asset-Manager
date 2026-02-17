@@ -325,6 +325,15 @@ export async function registerRoutes(
     const { url } = req.query as { url: string };
     if (!url) return res.status(400).json({ message: "URL required" });
     try {
+      // أولاً: جرب YouTube oEmbed — يرجع embed HTML فيه videoId الصحيح
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const oembedRes = await fetch(oembedUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json() as any;
+        const embedHtmlMatch = oembedData?.html?.match(/embed\/([\w-]{11})/);
+        if (embedHtmlMatch) return res.json({ videoId: embedHtmlMatch[1] });
+      }
+      // ثانياً: جلب صفحة الكليب واستخراج videoId الأصلي (مش المقترح)
       const response = await fetch(url, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
@@ -332,8 +341,17 @@ export async function registerRoutes(
         },
       });
       const html = await response.text();
-      const videoIdMatch = html.match(/"videoId":"([\w-]{11})"/);
-      if (videoIdMatch) return res.json({ videoId: videoIdMatch[1] });
+      // نبحث في videoDetails أو playerMicroformat — هذه تحتوي الفيديو الأصلي
+      const patterns = [
+        /"videoDetails":\{"videoId":"([\w-]{11})"/,
+        /"playerMicroformat":\{[^}]*"videoId":"([\w-]{11})"/,
+        /"currentVideoEndpoint":\{[^}]*"videoId":"([\w-]{11})"/,
+        /"watchEndpoint":\{"videoId":"([\w-]{11})"/,
+      ];
+      for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (match) return res.json({ videoId: match[1] });
+      }
       return res.status(404).json({ message: "Could not extract video ID" });
     } catch (err: any) {
       return res.status(500).json({ message: err.message });

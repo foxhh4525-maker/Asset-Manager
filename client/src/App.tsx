@@ -36,6 +36,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/submit" component={SubmitPage} />
       <Route path="/dashboard" component={Dashboard} />
+      <Route path="/admin-login" component={AdminLogin} />
       {/* ✅ /studio محمي — غير الأدمن يُعاد توجيهه للرئيسية */}
       <Route path="/studio">
         <AdminRoute component={Studio} />

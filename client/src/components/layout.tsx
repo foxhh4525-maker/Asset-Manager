@@ -7,6 +7,7 @@ import {
   Plus,
   MonitorPlay,
   Menu,
+  Lock,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -134,9 +135,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <Button
                 variant="ghost"
                 className="hover:bg-primary/10 hover:text-primary"
-                onClick={() => (window.location.href = "/api/auth/discord")}
+                onClick={() => (window.location.href = "/admin-login")}
               >
-                تسجيل الدخول عبر ديسكورد
+                دخول الإدارة
               </Button>
             )}
           </div>
@@ -186,9 +187,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 ) : (
                   <Button
                     className="w-full"
-                    onClick={() => (window.location.href = "/api/auth/discord")}
+                    onClick={() => (window.location.href = "/admin-login")}
                   >
-                    تسجيل الدخول عبر ديسكورد
+                    دخول الإدارة
                   </Button>
                 )}
               </div>

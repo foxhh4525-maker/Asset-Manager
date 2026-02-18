@@ -45,7 +45,7 @@ export function useLogout() {
 
 export function useLogin() {
   const login = () => {
-    window.location.href = "/api/auth/discord";
+    window.location.href = "/admin-login";
   };
   return { login };
 }

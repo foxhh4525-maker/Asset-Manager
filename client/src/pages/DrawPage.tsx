@@ -7,111 +7,92 @@ import { useUser } from "@/hooks/use-auth";
 import { IdentityModal } from "@/components/identity-modal";
 import {
   Pen, Eraser, RotateCcw, RotateCw, Trash2, Download,
-  Send, ChevronDown, Minus, Square, Circle, Slash,
+  Send, Square, Circle, Slash,
   PaintBucket, Type, Loader2, CheckCircle2, X, Sparkles, Pencil
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-// ─── أنواع الأدوات ───────────────────────────────────────────
 type Tool = "pen" | "brush" | "eraser" | "fill" | "line" | "rect" | "circle" | "text";
 
-// ─── لوحة الألوان ──────────────────────────────────────────
 const PALETTE = [
-  "#FFFFFF","#F8F8F8","#D4D4D4","#A3A3A3","#525252","#262626","#0A0A0A",
+  "#000000","#262626","#525252","#A3A3A3","#D4D4D4","#F0F0F0","#FFFFFF",
   "#EF4444","#F97316","#EAB308","#22C55E","#06B6D4","#3B82F6","#8B5CF6","#EC4899",
   "#FCA5A5","#FED7AA","#FEF08A","#BBF7D0","#A5F3FC","#BFDBFE","#DDD6FE","#FBCFE8",
   "#7F1D1D","#7C2D12","#713F12","#14532D","#164E63","#1E3A5F","#3B0764","#831843",
+  "#FF0080","#FF4500","#FFD700","#00FF7F","#00BFFF","#9400D3","#FF69B4","#40E0D0",
 ];
 
-// ─── أحجام الفرشاة ─────────────────────────────────────────
 const BRUSH_SIZES = [2, 4, 8, 14, 22, 34];
 
 interface Point { x: number; y: number; }
 
 function getPos(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElement): Point {
-  const rect = canvas.getBoundingClientRect();
+  const rect   = canvas.getBoundingClientRect();
   const scaleX = canvas.width  / rect.width;
   const scaleY = canvas.height / rect.height;
   if ("touches" in e) {
-    return {
-      x: (e.touches[0].clientX - rect.left) * scaleX,
-      y: (e.touches[0].clientY - rect.top)  * scaleY,
-    };
+    const t = (e as React.TouchEvent).changedTouches[0] || (e as React.TouchEvent).touches[0];
+    return { x: (t.clientX - rect.left) * scaleX, y: (t.clientY - rect.top) * scaleY };
   }
   return {
-    x: (e.clientX - rect.left) * scaleX,
-    y: (e.clientY - rect.top)  * scaleY,
+    x: ((e as React.MouseEvent).clientX - rect.left) * scaleX,
+    y: ((e as React.MouseEvent).clientY - rect.top)  * scaleY,
   };
 }
 
-// ─── Flood Fill ─────────────────────────────────────────────
-function colorMatch(data: Uint8ClampedArray, idx: number, tr: number, tg: number, tb: number, ta: number, tolerance = 30) {
-  return Math.abs(data[idx] - tr) <= tolerance &&
-         Math.abs(data[idx+1] - tg) <= tolerance &&
-         Math.abs(data[idx+2] - tb) <= tolerance &&
-         Math.abs(data[idx+3] - ta) <= tolerance;
-}
-
+// Flood Fill احترافي
 function floodFill(ctx: CanvasRenderingContext2D, x: number, y: number, fillColor: string) {
-  const img    = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
-  const data   = img.data;
-  const w      = ctx.canvas.width;
-  const h      = ctx.canvas.height;
-  const cx = Math.floor(x); const cy = Math.floor(y);
+  const w = ctx.canvas.width, h = ctx.canvas.height;
+  const img  = ctx.getImageData(0, 0, w, h);
+  const data = img.data;
+  const cx = Math.round(x), cy = Math.round(y);
   if (cx < 0 || cy < 0 || cx >= w || cy >= h) return;
-  const idx = (cy * w + cx) * 4;
-  const tr = data[idx], tg = data[idx+1], tb = data[idx+2], ta = data[idx+3];
 
-  const r = parseInt(fillColor.slice(1,3), 16);
-  const g = parseInt(fillColor.slice(3,5), 16);
-  const b = parseInt(fillColor.slice(5,7), 16);
+  const si = (cy * w + cx) * 4;
+  const tr = data[si], tg = data[si+1], tb = data[si+2], ta = data[si+3];
 
-  if (tr===r && tg===g && tb===b) return;
+  let fc = fillColor;
+  if (fc.length === 4) fc = "#"+fc[1]+fc[1]+fc[2]+fc[2]+fc[3]+fc[3];
+  const fr = parseInt(fc.slice(1,3),16), fg = parseInt(fc.slice(3,5),16), fb = parseInt(fc.slice(5,7),16);
+
+  if (Math.abs(tr-fr)<=2 && Math.abs(tg-fg)<=2 && Math.abs(tb-fb)<=2 && ta===255) return;
+
+  const TOL = 35;
+  function match(i: number) {
+    return Math.abs(data[i]-tr)<=TOL && Math.abs(data[i+1]-tg)<=TOL &&
+           Math.abs(data[i+2]-tb)<=TOL && Math.abs(data[i+3]-ta)<=TOL;
+  }
 
   const visited = new Uint8Array(w * h);
-  const stack = [cx + cy * w];
-  visited[cx + cy * w] = 1;
-
-  while (stack.length) {
-    const pos = stack.pop()!;
-    const px = pos % w;
-    const py = Math.floor(pos / w);
-    const i = pos * 4;
-    data[i]=r; data[i+1]=g; data[i+2]=b; data[i+3]=255;
-
-    const neighbors = [
-      px > 0 ? pos - 1 : -1,
-      px < w - 1 ? pos + 1 : -1,
-      py > 0 ? pos - w : -1,
-      py < h - 1 ? pos + w : -1,
-    ];
-    for (const n of neighbors) {
-      if (n >= 0 && !visited[n]) {
-        visited[n] = 1;
-        if (colorMatch(data, n * 4, tr, tg, tb, ta)) {
-          stack.push(n);
-        }
-      }
-    }
+  const q: number[] = [cy * w + cx];
+  visited[cy * w + cx] = 1;
+  let head = 0;
+  while (head < q.length) {
+    const pos = q[head++];
+    const px = pos % w, py = (pos - px) / w;
+    const pi = pos * 4;
+    data[pi]=fr; data[pi+1]=fg; data[pi+2]=fb; data[pi+3]=255;
+    if (px>0   && !visited[pos-1] && match((pos-1)*4)) { visited[pos-1]=1; q.push(pos-1); }
+    if (px<w-1 && !visited[pos+1] && match((pos+1)*4)) { visited[pos+1]=1; q.push(pos+1); }
+    if (py>0   && !visited[pos-w] && match((pos-w)*4)) { visited[pos-w]=1; q.push(pos-w); }
+    if (py<h-1 && !visited[pos+w] && match((pos+w)*4)) { visited[pos+w]=1; q.push(pos+w); }
   }
   ctx.putImageData(img, 0, 0);
 }
 
 export default function DrawPage() {
-  const canvasRef     = useRef<HTMLCanvasElement>(null);
-  const overlayRef    = useRef<HTMLCanvasElement>(null); // لرسم الأشكال المعاينة
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
   const [, setLocation] = useLocation();
-  const { data: user }  = useUser();
-  const { identity }    = useIdentity();
+  const { data: user } = useUser();
+  const { identity }   = useIdentity();
 
   const [tool,       setTool]       = useState<Tool>("pen");
   const [color,      setColor]      = useState("#FFFFFF");
   const [brushSize,  setBrushSize]  = useState(4);
   const [opacity,    setOpacity]    = useState(100);
-  const [history,    setHistory]    = useState<ImageData[]>([]);
-  const [histIdx,    setHistIdx]    = useState(-1);
-  const [isDrawing,  setIsDrawing]  = useState(false);
-  const [startPt,    setStartPt]    = useState<Point | null>(null);
+  const [histIdx,    setHistIdx]    = useState(0);
+  const [histLen,    setHistLen]    = useState(1);
   const [textInput,  setTextInput]  = useState("");
   const [textPos,    setTextPos]    = useState<Point | null>(null);
   const [submitted,  setSubmitted]  = useState(false);
@@ -119,220 +100,210 @@ export default function DrawPage() {
   const [identityOpen, setIdentityOpen] = useState(false);
   const [colorInput, setColorInput] = useState("#FFFFFF");
 
-  // ─── تهيئة الكانفاس ─────────────────────────────────────
+  // Refs حرجة - تُستخدم داخل event handlers لتجنب stale closure
+  const toolRef      = useRef<Tool>("pen");
+  const colorRef     = useRef("#FFFFFF");
+  const szRef        = useRef(4);
+  const opRef        = useRef(100);
+  const drawingRef   = useRef(false);
+  const startRef     = useRef<Point | null>(null);
+  const histRef      = useRef<ImageData[]>([]);
+  const hidxRef      = useRef(0);
+
+  // مزامنة refs
+  useEffect(() => { toolRef.current  = tool;      }, [tool]);
+  useEffect(() => { colorRef.current = color;     }, [color]);
+  useEffect(() => { szRef.current    = brushSize; }, [brushSize]);
+  useEffect(() => { opRef.current    = opacity;   }, [opacity]);
+
+  // تهيئة الكانفاس
   useEffect(() => {
     const canvas = canvasRef.current!;
-    const ctx    = canvas.getContext("2d")!;
+    const ctx = canvas.getContext("2d")!;
     ctx.fillStyle = "#111111";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    saveHistory();
+    const snap = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    histRef.current = [snap];
+    hidxRef.current = 0;
+    setHistIdx(0); setHistLen(1);
   }, []);
 
-  const histIdxRef = useRef(-1);
-  histIdxRef.current = histIdx;
-
-  const saveHistory = useCallback(() => {
+  const pushHistory = useCallback(() => {
     const canvas = canvasRef.current!;
-    const ctx    = canvas.getContext("2d")!;
-    const img    = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    setHistory(prev => {
-      const currentIdx = histIdxRef.current;
-      const next = prev.slice(0, currentIdx + 1);
-      next.push(img);
-      if (next.length > 50) next.shift();
-      histIdxRef.current = next.length - 1;
-      setHistIdx(next.length - 1);
-      return next;
-    });
+    if (!canvas) return;
+    const snap = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height);
+    const next = histRef.current.slice(0, hidxRef.current + 1);
+    next.push(snap);
+    if (next.length > 60) next.shift();
+    histRef.current  = next;
+    hidxRef.current  = next.length - 1;
+    setHistIdx(next.length - 1);
+    setHistLen(next.length);
   }, []);
 
   const undo = useCallback(() => {
-    if (histIdx <= 0) return;
-    const canvas = canvasRef.current!;
-    const ctx    = canvas.getContext("2d")!;
-    const newIdx = histIdx - 1;
-    ctx.putImageData(history[newIdx], 0, 0);
-    setHistIdx(newIdx);
-  }, [history, histIdx]);
+    if (hidxRef.current <= 0) return;
+    const idx = hidxRef.current - 1;
+    canvasRef.current!.getContext("2d")!.putImageData(histRef.current[idx], 0, 0);
+    hidxRef.current = idx;
+    setHistIdx(idx);
+    overlayRef.current!.getContext("2d")!.clearRect(0, 0, 900, 600);
+  }, []);
 
   const redo = useCallback(() => {
-    if (histIdx >= history.length - 1) return;
-    const canvas = canvasRef.current!;
-    const ctx    = canvas.getContext("2d")!;
-    const newIdx = histIdx + 1;
-    ctx.putImageData(history[newIdx], 0, 0);
-    setHistIdx(newIdx);
-  }, [history, histIdx]);
+    if (hidxRef.current >= histRef.current.length - 1) return;
+    const idx = hidxRef.current + 1;
+    canvasRef.current!.getContext("2d")!.putImageData(histRef.current[idx], 0, 0);
+    hidxRef.current = idx;
+    setHistIdx(idx);
+    overlayRef.current!.getContext("2d")!.clearRect(0, 0, 900, 600);
+  }, []);
 
   const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current!;
-    const ctx    = canvas.getContext("2d")!;
-    // امسح الـ overlay أيضاً
-    const overlay = overlayRef.current!;
-    const octx    = overlay.getContext("2d")!;
-    octx.clearRect(0, 0, overlay.width, overlay.height);
+    const ctx = canvasRef.current!.getContext("2d")!;
+    overlayRef.current!.getContext("2d")!.clearRect(0, 0, 900, 600);
     ctx.fillStyle = "#111111";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    saveHistory();
-  }, [saveHistory]);
+    ctx.fillRect(0, 0, 900, 600);
+    drawingRef.current = false;
+    startRef.current   = null;
+    pushHistory();
+  }, [pushHistory]);
 
-  // ─── رسم بالفرشاة / القلم ─────────────────────────────
-  const setupCtx = useCallback((ctx: CanvasRenderingContext2D) => {
-    ctx.strokeStyle = tool === "eraser" ? "#111111" : color;
-    ctx.fillStyle   = color;
-    ctx.globalAlpha = opacity / 100;
-    ctx.lineWidth   = tool === "eraser" ? brushSize * 2 : brushSize;
+  // إعداد ctx للرسم
+  function styleCtx(ctx: CanvasRenderingContext2D, isPreview = false) {
+    const t  = toolRef.current;
+    const c  = colorRef.current;
+    const sz = szRef.current;
+    const op = opRef.current;
+    ctx.globalAlpha = op / 100;
+    ctx.strokeStyle = (t === "eraser" && !isPreview) ? "#111111" : c;
+    ctx.fillStyle   = c;
+    ctx.lineWidth   = (t === "eraser" && !isPreview) ? sz * 2.5 : sz;
     ctx.lineCap     = "round";
     ctx.lineJoin    = "round";
-    if (tool === "brush") {
-      ctx.shadowBlur  = brushSize * 0.8;
-      ctx.shadowColor = color;
-    } else {
-      ctx.shadowBlur  = 0;
-    }
-  }, [tool, color, brushSize, opacity]);
+    ctx.shadowBlur  = (t === "brush" && !isPreview) ? sz * 1.2 : 0;
+    ctx.shadowColor = (t === "brush" && !isPreview) ? c : "transparent";
+  }
 
-  const onPointerDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+  // رسم شكل
+  function renderShape(ctx: CanvasRenderingContext2D, t: Tool, from: Point, to: Point, isPreview = false) {
+    styleCtx(ctx, isPreview);
+    ctx.beginPath();
+    if (t === "line") {
+      ctx.moveTo(from.x, from.y);
+      ctx.lineTo(to.x, to.y);
+      ctx.stroke();
+    } else if (t === "rect") {
+      ctx.strokeRect(from.x, from.y, to.x - from.x, to.y - from.y);
+    } else if (t === "circle") {
+      const rx = Math.abs(to.x - from.x) / 2;
+      const ry = Math.abs(to.y - from.y) / 2;
+      ctx.ellipse(from.x + (to.x-from.x)/2, from.y + (to.y-from.y)/2, rx||1, ry||1, 0, 0, Math.PI*2);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur  = 0;
+  }
+
+  const handleDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     const canvas = canvasRef.current!;
     const ctx    = canvas.getContext("2d")!;
     const pt     = getPos(e, canvas);
+    const t      = toolRef.current;
 
-    if (tool === "fill") {
-      floodFill(ctx, pt.x, pt.y, color);
-      saveHistory();
+    if (t === "fill") {
+      floodFill(ctx, pt.x, pt.y, colorRef.current);
+      pushHistory();
       return;
     }
-    if (tool === "text") {
-      setTextPos(pt);
-      return;
-    }
+    if (t === "text") { setTextPos(pt); return; }
 
-    setIsDrawing(true);
-    setStartPt(pt);
+    drawingRef.current = true;
+    startRef.current   = { ...pt };
 
-    if (tool === "pen" || tool === "brush" || tool === "eraser") {
+    if (t === "pen" || t === "brush" || t === "eraser") {
+      styleCtx(ctx);
       ctx.beginPath();
       ctx.moveTo(pt.x, pt.y);
-      setupCtx(ctx);
     }
-  }, [tool, color, setupCtx, saveHistory]);
+  }, [pushHistory]);
 
-  const onPointerMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing) return;
+  const handleMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (!drawingRef.current) return;
     e.preventDefault();
     const canvas  = canvasRef.current!;
     const overlay = overlayRef.current!;
     const ctx     = canvas.getContext("2d")!;
     const octx    = overlay.getContext("2d")!;
     const pt      = getPos(e, canvas);
+    const t       = toolRef.current;
+    const from    = startRef.current;
 
-    if (tool === "pen" || tool === "brush" || tool === "eraser") {
-      setupCtx(ctx);
+    if (t === "pen" || t === "brush" || t === "eraser") {
+      styleCtx(ctx);
       ctx.lineTo(pt.x, pt.y);
       ctx.stroke();
-    } else if (startPt) {
-      // معاينة الأشكال على الـ overlay
+    } else if (from) {
       octx.clearRect(0, 0, overlay.width, overlay.height);
-      octx.strokeStyle = color;
-      octx.fillStyle   = color;
-      octx.globalAlpha = opacity / 100;
-      octx.lineWidth   = brushSize;
-      octx.lineCap     = "round";
-      const dx = pt.x - startPt.x;
-      const dy = pt.y - startPt.y;
-
-      octx.beginPath();
-      if (tool === "line") {
-        octx.moveTo(startPt.x, startPt.y);
-        octx.lineTo(pt.x, pt.y);
-        octx.stroke();
-      } else if (tool === "rect") {
-        octx.strokeRect(startPt.x, startPt.y, dx, dy);
-      } else if (tool === "circle") {
-        const rx = Math.abs(dx) / 2;
-        const ry = Math.abs(dy) / 2;
-        octx.ellipse(startPt.x + dx/2, startPt.y + dy/2, rx, ry, 0, 0, Math.PI*2);
-        octx.stroke();
-      }
+      renderShape(octx, t, from, pt, true);
     }
-  }, [isDrawing, tool, color, brushSize, opacity, startPt, setupCtx]);
+  }, []);
 
-  const onPointerUp = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDrawing) return;
+  const handleUp = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    if (!drawingRef.current) return;
     e.preventDefault();
     const canvas  = canvasRef.current!;
     const overlay = overlayRef.current!;
     const ctx     = canvas.getContext("2d")!;
     const octx    = overlay.getContext("2d")!;
-    const pt      = getPos(e, canvas);
+    const t       = toolRef.current;
+    const from    = startRef.current;
 
-    if (tool === "pen" || tool === "brush" || tool === "eraser") {
+    if (t === "pen" || t === "brush" || t === "eraser") {
       ctx.closePath();
-    } else if (startPt) {
-      // امسح الـ overlay وارسم الشكل النهائي مباشرة على الكانفاس الرئيسي
+      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
+    } else if (from) {
       octx.clearRect(0, 0, overlay.width, overlay.height);
-
-      setupCtx(ctx);
-      ctx.beginPath();
-      if (tool === "line") {
-        ctx.moveTo(startPt.x, startPt.y);
-        ctx.lineTo(pt.x, pt.y);
-        ctx.stroke();
-      } else if (tool === "rect") {
-        const dx = pt.x - startPt.x;
-        const dy = pt.y - startPt.y;
-        ctx.strokeRect(startPt.x, startPt.y, dx, dy);
-      } else if (tool === "circle") {
-        const dx = pt.x - startPt.x;
-        const dy = pt.y - startPt.y;
-        ctx.ellipse(startPt.x + dx/2, startPt.y + dy/2, Math.abs(dx)/2, Math.abs(dy)/2, 0, 0, Math.PI*2);
-        ctx.stroke();
-      }
+      const pt = getPos(e, canvas);
+      renderShape(ctx, t, from, pt, false);
     }
 
     ctx.globalAlpha = 1;
     ctx.shadowBlur  = 0;
-    setIsDrawing(false);
-    setStartPt(null);
-    saveHistory();
-  }, [isDrawing, tool, startPt, setupCtx, saveHistory]);
+    drawingRef.current = false;
+    startRef.current   = null;
+    pushHistory();
+  }, [pushHistory]);
 
-  // ─── إضافة نص ───────────────────────────────────────────
   const commitText = useCallback(() => {
     if (!textPos || !textInput.trim()) { setTextPos(null); setTextInput(""); return; }
-    const canvas = canvasRef.current!;
-    const ctx    = canvas.getContext("2d")!;
-    ctx.fillStyle   = color;
-    ctx.globalAlpha = opacity / 100;
-    ctx.font        = `bold ${brushSize * 5}px 'Cairo', sans-serif`;
+    const ctx = canvasRef.current!.getContext("2d")!;
+    ctx.fillStyle   = colorRef.current;
+    ctx.globalAlpha = opRef.current / 100;
+    ctx.font        = `bold ${szRef.current * 5}px 'Cairo', sans-serif`;
     ctx.fillText(textInput, textPos.x, textPos.y);
     ctx.globalAlpha = 1;
-    setTextPos(null);
-    setTextInput("");
-    saveHistory();
-  }, [textPos, textInput, color, opacity, brushSize, saveHistory]);
+    setTextPos(null); setTextInput("");
+    pushHistory();
+  }, [textPos, textInput, pushHistory]);
 
-  // ─── تحميل ───────────────────────────────────────────────
   const download = () => {
-    const canvas = canvasRef.current!;
     const a = document.createElement("a");
     a.download = "dream-art.png";
-    a.href = canvas.toDataURL("image/png");
+    a.href = canvasRef.current!.toDataURL("image/png");
     a.click();
   };
 
-  // ─── إرسال ───────────────────────────────────────────────
   const submit = async () => {
     if (!user && !identity) { setIdentityOpen(true); return; }
-
     const canvas = canvasRef.current!;
     const imageData = canvas.toDataURL("image/jpeg", 0.85);
     const artistName   = user ? user.username : (identity?.name ?? "زائر");
     const artistAvatar = user
       ? (user.avatarUrl || null)
       : (identity ? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed) : null);
-
     setSubmitting(true);
     try {
       const res = await fetch("/api/artworks", {
@@ -340,165 +311,141 @@ export default function DrawPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageData, artistName, artistAvatar }),
       });
-      if (res.ok) {
-        setSubmitted(true);
-        setTimeout(() => setLocation("/dream-artists"), 2000);
-      }
+      if (res.ok) { setSubmitted(true); setTimeout(() => setLocation("/dream-artists"), 2000); }
     } catch {}
     setSubmitting(false);
   };
 
-  // ─── اختصارات لوحة المفاتيح ─────────────────────────────
   useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
+    const h = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === "z") { e.preventDefault(); undo(); }
       if (e.ctrlKey && e.key === "y") { e.preventDefault(); redo(); }
       if (e.key === "Escape") { setTextPos(null); setTextInput(""); }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [undo, redo]);
 
   const TOOLS: { id: Tool; icon: any; label: string }[] = [
-    { id: "pen",    icon: Pen,        label: "قلم" },
-    { id: "brush",  icon: Sparkles,   label: "فرشاة ضوئية" },
-    { id: "eraser", icon: Eraser,     label: "ممحاة" },
-    { id: "fill",   icon: PaintBucket,label: "تعبئة" },
-    { id: "line",   icon: Slash,      label: "خط" },
-    { id: "rect",   icon: Square,     label: "مستطيل" },
-    { id: "circle", icon: Circle,     label: "دائرة" },
-    { id: "text",   icon: Type,       label: "نص" },
+    { id: "pen",    icon: Pen,         label: "قلم" },
+    { id: "brush",  icon: Sparkles,    label: "فرشاة ضوئية" },
+    { id: "eraser", icon: Eraser,      label: "ممحاة" },
+    { id: "fill",   icon: PaintBucket, label: "تعبئة" },
+    { id: "line",   icon: Slash,       label: "خط مستقيم" },
+    { id: "rect",   icon: Square,      label: "مستطيل" },
+    { id: "circle", icon: Circle,      label: "دائرة" },
+    { id: "text",   icon: Type,        label: "نص" },
   ];
 
   const getCursor = () => {
     if (tool === "eraser") return "cell";
-    if (tool === "fill") return "crosshair";
-    if (tool === "text") return "text";
+    if (tool === "fill")   return "crosshair";
+    if (tool === "text")   return "text";
     return "crosshair";
   };
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="flex items-center justify-between mb-6"
-        >
+      <div className="max-w-7xl mx-auto px-2 lg:px-4">
+        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }}
+          className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+            <h1 className="text-2xl lg:text-3xl font-bold text-white flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-pink-500 to-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.5)]">
                 🎨
               </div>
               ارسم الستريمر
             </h1>
-            <p className="text-muted-foreground text-sm mt-1">استخدم الأدوات الاحترافية لرسم شخصية الستريمر</p>
+            <p className="text-muted-foreground text-xs mt-1">استخدم الأدوات الاحترافية لرسم شخصية الستريمر</p>
           </div>
           <Link href="/dream-artists">
-            <Button variant="outline" className="border-purple-500/30 text-purple-300 hover:bg-purple-500/10">
+            <Button variant="outline" size="sm" className="border-purple-500/30 text-purple-300 hover:bg-purple-500/10">
               معرض الرسامين ←
             </Button>
           </Link>
         </motion.div>
 
-        <div className="flex gap-4 flex-col lg:flex-row">
+        <div className="flex gap-3 flex-col">
 
-          {/* ─── شريط الأدوات الجانبي ─── */}
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex lg:flex-col gap-2 bg-[#1a1a2e] border border-white/10 rounded-2xl p-3 shadow-xl flex-wrap lg:flex-nowrap lg:w-20"
-          >
-            {/* الأدوات */}
-            {TOOLS.map(t => (
-              <button
-                key={t.id}
-                onClick={() => setTool(t.id)}
-                title={t.label}
-                className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all text-xs font-medium relative group
-                  ${tool === t.id
-                    ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.6)]"
-                    : "text-white/50 hover:text-white hover:bg-white/10"
-                  }`}
-              >
-                <t.icon className="w-5 h-5" />
-                <span className="hidden lg:block text-[9px] leading-none">{t.label}</span>
-                {/* Tooltip */}
-                <span className="absolute right-full mr-2 bg-black text-white text-xs px-2 py-1 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none hidden lg:block">
-                  {t.label}
-                </span>
-              </button>
-            ))}
+          {/* شريط الأدوات */}
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-3 shadow-xl">
+            <div className="flex items-center justify-between gap-1 mb-3 flex-wrap">
+              <div className="flex gap-1">
+                <button onClick={undo} disabled={histIdx <= 0} title="تراجع (Ctrl+Z)"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                  <RotateCcw className="w-4 h-4" />
+                </button>
+                <button onClick={redo} disabled={histIdx >= histLen - 1} title="إعادة (Ctrl+Y)"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                  <RotateCw className="w-4 h-4" />
+                </button>
+                <button onClick={clearCanvas} title="مسح الكل"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
 
-            <div className="h-px bg-white/10 w-full hidden lg:block" />
+              <div className="flex gap-1 flex-wrap justify-center">
+                {TOOLS.map(t => (
+                  <button key={t.id} onClick={() => setTool(t.id)} title={t.label}
+                    className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all relative group
+                      ${tool === t.id
+                        ? "bg-purple-600 text-white shadow-[0_0_12px_rgba(168,85,247,0.6)]"
+                        : "text-white/50 hover:text-white hover:bg-white/10"}`}>
+                    <t.icon className="w-4 h-4" />
+                    <span className="absolute top-full mt-1 bg-black/90 text-white text-[10px] px-2 py-0.5 rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
+                      {t.label}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-            {/* Undo / Redo */}
-            <button onClick={undo} disabled={histIdx <= 0} title="تراجع (Ctrl+Z)"
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-              <RotateCcw className="w-5 h-5" />
-            </button>
-            <button onClick={redo} disabled={histIdx >= history.length - 1} title="إعادة (Ctrl+Y)"
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
-              <RotateCw className="w-5 h-5" />
-            </button>
-            <button onClick={clearCanvas} title="مسح الكل"
-              className="w-12 h-12 rounded-xl flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all">
-              <Trash2 className="w-5 h-5" />
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-white/50 text-xs whitespace-nowrap">الحجم {brushSize}px</span>
+              <input type="range" min={1} max={80} value={brushSize}
+                onChange={e => setBrushSize(Number(e.target.value))}
+                className="flex-1 accent-purple-500" />
+              <span className="text-white/50 text-xs whitespace-nowrap">الشفافية {opacity}%</span>
+              <input type="range" min={1} max={100} value={opacity}
+                onChange={e => setOpacity(Number(e.target.value))}
+                className="flex-1 accent-pink-500" />
+            </div>
           </motion.div>
 
-          {/* ─── الكانفاس ─── */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.97 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex-1 relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(168,85,247,0.1)] bg-[#111]"
-            style={{ touchAction: "none" }}
-          >
-            <canvas
-              ref={canvasRef}
-              width={900}
-              height={600}
+          {/* الكانفاس */}
+          <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+            className="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_40px_rgba(168,85,247,0.1)] bg-[#111]"
+            style={{ touchAction: "none", aspectRatio: "3/2" }}>
+            <canvas ref={canvasRef} width={900} height={600}
               className="w-full h-full block"
-              style={{ cursor: getCursor() }}
-              onMouseDown={onPointerDown}
-              onMouseMove={onPointerMove}
-              onMouseUp={onPointerUp}
-              onMouseLeave={onPointerUp}
-              onTouchStart={onPointerDown}
-              onTouchMove={onPointerMove}
-              onTouchEnd={onPointerUp}
+              style={{ cursor: getCursor(), touchAction: "none" }}
+              onMouseDown={handleDown} onMouseMove={handleMove}
+              onMouseUp={handleUp} onMouseLeave={handleUp}
+              onTouchStart={handleDown} onTouchMove={handleMove} onTouchEnd={handleUp}
             />
-            {/* Overlay للمعاينة */}
-            <canvas
-              ref={overlayRef}
-              width={900}
-              height={600}
-              className="absolute inset-0 w-full h-full pointer-events-none"
-            />
+            <canvas ref={overlayRef} width={900} height={600}
+              className="absolute inset-0 w-full h-full pointer-events-none" />
 
-            {/* ─── إدخال النص ─── */}
+            {/* إدخال النص */}
             <AnimatePresence>
               {textPos && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
+                <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9 }}
-                  className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center"
-                >
+                  className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center">
                   <div className="bg-[#1a1a2e] border border-purple-500/40 rounded-2xl p-6 shadow-2xl w-80">
                     <h3 className="text-white font-bold mb-3 text-center">✏️ أضف نصاً</h3>
-                    <input
-                      autoFocus
-                      value={textInput}
-                      onChange={e => setTextInput(e.target.value)}
-                      onKeyDown={e => { if (e.key === "Enter") commitText(); if (e.key === "Escape") { setTextPos(null); setTextInput(""); } }}
-                      placeholder="اكتب هنا..."
-                      dir="rtl"
-                      className="w-full bg-black/40 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-purple-500 text-center text-lg mb-4"
-                    />
+                    <input autoFocus value={textInput} onChange={e => setTextInput(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") commitText();
+                        if (e.key === "Escape") { setTextPos(null); setTextInput(""); }
+                      }}
+                      placeholder="اكتب هنا..." dir="rtl"
+                      className="w-full bg-black/40 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-white/30 focus:outline-none focus:border-purple-500 text-center text-lg mb-4" />
                     <div className="flex gap-2">
-                      <button onClick={commitText} className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-xl font-bold transition-colors">
+                      <button onClick={commitText}
+                        className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-2 rounded-xl font-bold transition-colors">
                         إضافة
                       </button>
                       <button onClick={() => { setTextPos(null); setTextInput(""); }}
@@ -511,20 +458,13 @@ export default function DrawPage() {
               )}
             </AnimatePresence>
 
-            {/* ─── نجاح الإرسال ─── */}
+            {/* نجاح الإرسال */}
             <AnimatePresence>
               {submitted && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0.5 }}
-                    animate={{ scale: 1 }}
-                    transition={{ type: "spring", damping: 15 }}
-                    className="text-center"
-                  >
+                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                  className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center">
+                  <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }}
+                    transition={{ type: "spring", damping: 15 }} className="text-center">
                     <CheckCircle2 className="w-20 h-20 text-green-400 mx-auto mb-4" />
                     <h2 className="text-2xl font-bold text-white mb-2">تم إرسال رسمتك! 🎉</h2>
                     <p className="text-white/60">ستظهر في المعرض بعد موافقة الأدمن</p>
@@ -534,101 +474,60 @@ export default function DrawPage() {
             </AnimatePresence>
           </motion.div>
 
-          {/* ─── لوحة التحكم اليمنى ─── */}
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className="flex flex-col gap-4 w-full lg:w-64"
-          >
-            {/* اللون الحالي */}
-            <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-xl">
-              <label className="text-white/60 text-xs font-medium uppercase tracking-widest block mb-3">اللون الحالي</label>
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className="w-14 h-14 rounded-xl border-2 border-white/20 shadow-lg flex-shrink-0 cursor-pointer relative overflow-hidden"
-                  style={{ backgroundColor: color }}
-                >
-                  <input
-                    type="color"
-                    value={color}
-                    onChange={e => { setColor(e.target.value); setColorInput(e.target.value); }}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  />
-                </div>
-                <input
-                  value={colorInput}
-                  onChange={e => { setColorInput(e.target.value); if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) setColor(e.target.value); }}
-                  className="flex-1 bg-black/40 border border-white/20 rounded-lg px-3 py-2 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
-                  maxLength={7}
-                />
+          {/* لوحة الألوان */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-xl">
+            <div className="flex items-center gap-3 mb-3">
+              <label className="text-white/60 text-xs font-medium uppercase tracking-widest whitespace-nowrap">اللون الحالي</label>
+              <div className="w-10 h-10 rounded-xl border-2 border-white/20 shadow-lg flex-shrink-0 cursor-pointer relative overflow-hidden"
+                style={{ backgroundColor: color }}>
+                <input type="color" value={color}
+                  onChange={e => { setColor(e.target.value); setColorInput(e.target.value); }}
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" />
               </div>
-
-              {/* لوحة الألوان */}
-              <div className="grid grid-cols-7 gap-1">
-                {PALETTE.map(c => (
-                  <button
-                    key={c}
-                    onClick={() => { setColor(c); setColorInput(c); }}
-                    className={`w-full aspect-square rounded-md border transition-transform hover:scale-110 ${color === c ? "border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.5)]" : "border-transparent"}`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
+              <input value={colorInput}
+                onChange={e => { setColorInput(e.target.value); if (/^#[0-9A-Fa-f]{6}$/.test(e.target.value)) setColor(e.target.value); }}
+                className="w-28 bg-black/40 border border-white/20 rounded-lg px-3 py-1.5 text-white text-xs font-mono focus:outline-none focus:border-purple-500"
+                maxLength={7} dir="ltr" />
             </div>
+            <div className="grid gap-1" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(30px, 1fr))" }}>
+              {PALETTE.map(c => (
+                <button key={c} onClick={() => { setColor(c); setColorInput(c); }}
+                  className={`aspect-square rounded-md border-2 transition-all hover:scale-110 hover:z-10 relative
+                    ${color === c ? "border-white scale-110 shadow-[0_0_8px_rgba(255,255,255,0.6)] z-10" : "border-transparent hover:border-white/40"}`}
+                  style={{ backgroundColor: c }} title={c} />
+              ))}
+            </div>
+          </motion.div>
 
-            {/* حجم الفرشاة */}
-            <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-xl">
-              <label className="text-white/60 text-xs font-medium uppercase tracking-widest block mb-3">
-                حجم الفرشاة — {brushSize}px
-              </label>
-              <div className="flex items-center gap-2 mb-3">
+          {/* أحجام الفرشاة */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-3 shadow-xl">
+            <div className="flex items-center gap-2">
+              <label className="text-white/60 text-xs font-medium whitespace-nowrap">حجم الفرشاة — {brushSize}px</label>
+              <div className="flex gap-1 flex-1 justify-around">
                 {BRUSH_SIZES.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setBrushSize(s)}
-                    className={`flex-1 flex items-center justify-center rounded-lg transition-all border ${brushSize === s ? "border-purple-500 bg-purple-500/20" : "border-white/10 hover:border-white/30"}`}
-                    style={{ height: 36 }}
-                  >
-                    <div
-                      className="rounded-full bg-white"
-                      style={{ width: Math.min(s, 22), height: Math.min(s, 22) }}
-                    />
+                  <button key={s} onClick={() => setBrushSize(s)}
+                    className={`w-10 h-10 rounded-lg flex items-center justify-center border transition-all
+                      ${brushSize === s ? "border-purple-500 bg-purple-500/20" : "border-white/10 hover:border-white/30"}`}>
+                    <div className="rounded-full bg-white"
+                      style={{ width: Math.min(s+2,24), height: Math.min(s+2,24) }} />
                   </button>
                 ))}
               </div>
-              <input
-                type="range" min={1} max={80} value={brushSize}
-                onChange={e => setBrushSize(Number(e.target.value))}
-                className="w-full accent-purple-500"
-              />
             </div>
+          </motion.div>
 
-            {/* الشفافية */}
-            <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-xl">
-              <label className="text-white/60 text-xs font-medium uppercase tracking-widest block mb-3">
-                الشفافية — {opacity}%
-              </label>
-              <input
-                type="range" min={1} max={100} value={opacity}
-                onChange={e => setOpacity(Number(e.target.value))}
-                className="w-full accent-purple-500"
-              />
-              <div className="flex justify-between text-white/30 text-xs mt-1">
-                <span>شفاف</span><span>معتم</span>
-              </div>
-            </div>
-
-            {/* هوية الرسام */}
+          {/* هوية الرسام + الأزرار */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+            className="flex gap-3 flex-col sm:flex-row">
             {!user && (
-              <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-xl">
-                <label className="text-white/60 text-xs font-medium uppercase tracking-widest block mb-3">الرسام</label>
+              <div className="bg-[#1a1a2e] border border-white/10 rounded-2xl p-4 shadow-xl flex-1">
+                <label className="text-white/60 text-xs font-medium uppercase tracking-widest block mb-2">الرسام</label>
                 {identity ? (
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => setIdentityOpen(true)}>
-                    <img
-                      src={buildAvatarUrl(identity.avatarStyle, identity.avatarSeed)}
-                      className="w-10 h-10 rounded-full border-2 border-purple-500/40"
-                      alt="avatar"
-                    />
+                    <img src={buildAvatarUrl(identity.avatarStyle, identity.avatarSeed)}
+                      className="w-10 h-10 rounded-full border-2 border-purple-500/40" alt="avatar" />
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-medium text-sm truncate">{identity.name}</p>
                       <p className="text-purple-400 text-xs flex items-center gap-1">
@@ -637,46 +536,35 @@ export default function DrawPage() {
                     </div>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => setIdentityOpen(true)}
-                    className="w-full py-3 border-2 border-dashed border-purple-500/30 rounded-xl text-purple-400 text-sm hover:border-purple-500/60 hover:bg-purple-500/5 transition-all"
-                  >
+                  <button onClick={() => setIdentityOpen(true)}
+                    className="w-full py-3 border-2 border-dashed border-purple-500/30 rounded-xl text-purple-400 text-sm hover:border-purple-500/60 hover:bg-purple-500/5 transition-all">
                     + أنشئ هويتك
                   </button>
                 )}
               </div>
             )}
-
-            {/* أزرار الإجراءات */}
-            <div className="flex flex-col gap-2">
-              <button
-                onClick={download}
-                className="flex items-center justify-center gap-2 py-3 rounded-xl border border-white/20 text-white/70 hover:text-white hover:bg-white/5 transition-all font-medium"
-              >
+            <div className="flex flex-col gap-2 flex-1">
+              <button onClick={download}
+                className="flex items-center justify-center gap-2 py-3 rounded-xl border border-white/20 text-white/70 hover:text-white hover:bg-white/5 transition-all font-medium">
                 <Download className="w-4 h-4" /> تحميل الرسمة
               </button>
-              <button
-                onClick={submit}
-                disabled={submitting}
-                className="flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-base shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] transition-all disabled:opacity-70"
-              >
+              <button onClick={submit} disabled={submitting}
+                className="flex items-center justify-center gap-2 py-4 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 text-white font-bold text-base shadow-[0_0_20px_rgba(168,85,247,0.4)] hover:shadow-[0_0_30px_rgba(168,85,247,0.6)] transition-all disabled:opacity-70">
                 {submitting
                   ? <><Loader2 className="w-5 h-5 animate-spin" /> جاري الإرسال...</>
-                  : <><Send className="w-5 h-5" /> إرسال الرسمة 🎨</>
-                }
+                  : <><Send className="w-5 h-5" /> إرسال الرسمة 🎨</>}
               </button>
             </div>
-
-            {/* تعليمات */}
-            <div className="bg-[#1a1a2e]/60 border border-white/5 rounded-xl p-3 text-white/40 text-xs space-y-1">
-              <p>💡 <strong className="text-white/60">Ctrl+Z</strong> للتراجع</p>
-              <p>💡 <strong className="text-white/60">Ctrl+Y</strong> للإعادة</p>
-              <p>💡 اضغط على اللون لفتح محدد الألوان</p>
-            </div>
           </motion.div>
+
+          <div className="bg-[#1a1a2e]/60 border border-white/5 rounded-xl p-3 text-white/40 text-xs flex gap-4 flex-wrap">
+            <span>💡 <strong className="text-white/60">Ctrl+Z</strong> للتراجع</span>
+            <span>💡 <strong className="text-white/60">Ctrl+Y</strong> للإعادة</span>
+            <span>💡 اضغط على مربع اللون لفتح محدد الألوان</span>
+            <span>💡 الدلو يملأ فقط المنطقة المحاطة بالألوان</span>
+          </div>
         </div>
       </div>
-
       <IdentityModal open={identityOpen} onClose={() => setIdentityOpen(false)} />
     </Layout>
   );

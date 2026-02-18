@@ -25,8 +25,8 @@ function fmtSec(sec: number): string {
 
 const submitSchema = z.object({
   url: z.string().url().regex(
-    /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/).+$/,
-    "يجب أن يكون رابط YouTube Clip صالحاً"
+    /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/|kick\.com\/).+$/,
+    "يجب أن يكون رابط YouTube Clip أو Kick صالحاً"
   ),
   tag: z.string().min(1, "يرجى اختيار تصنيف"),
 });
@@ -151,13 +151,13 @@ export default function SubmitPage() {
             <CardContent className="p-8">
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-                {/* رابط YouTube */}
+                {/* رابط YouTube أو Kick */}
                 <div className="space-y-2">
-                  <Label htmlFor="url">رابط YouTube Clip</Label>
+                  <Label htmlFor="url">رابط الكليب (YouTube أو Kick)</Label>
                   <div className="relative">
                     <Input
                       id="url"
-                      placeholder="https://youtube.com/clip/..."
+                      placeholder="https://youtube.com/clip/... أو https://kick.com/clip/..."
                       {...form.register("url", { onChange: () => { if (metadata) setMetadata(null); } })}
                       onBlur={handleUrlBlur}
                       className="pr-10 bg-background/50 border-border focus:border-primary h-12"

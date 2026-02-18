@@ -26,6 +26,7 @@ export const clips = pgTable("clips", {
   submittedBy: integer("submitted_by").references(() => users.id).notNull(),
   submitterName: text("submitter_name"),  // اسم الزائر (إن لم يكن مسجلاً)
   // ✅ بيانات التشغيل المباشر — تُحفظ لحظة الإرسال
+  platform:  text("platform").default("youtube"),   // "youtube" | "kick"
   videoId:   text("video_id"),
   startTime: integer("start_time").default(0),
   endTime:   integer("end_time").default(0),
@@ -83,6 +84,7 @@ const baseClipSchema = createInsertSchema(clips).omit({
 export const insertClipSchema = baseClipSchema.extend({
   submittedBy: z.number().int().optional(),
   submitterName: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل").max(30).optional(),
+  platform:  z.enum(["youtube", "kick"]).optional(),
   videoId:   z.string().optional(),
   startTime: z.number().int().min(0).optional(),
   endTime:   z.number().int().min(0).optional(),

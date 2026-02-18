@@ -51,10 +51,10 @@ export const api = {
       method: 'POST' as const,
       path: '/api/clips' as const,
       input: insertClipSchema.extend({
-        // نقبل رابط /clip/ الأصلي — السيرفر يحوّله تلقائياً قبل الحفظ
+        // نقبل روابط YouTube و Kick — السيرفر يحوّلها تلقائياً قبل الحفظ
         url: z.string().regex(
-          /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/).+$/,
-          "Must be a valid YouTube Clip or Watch URL"
+          /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/|kick\.com\/).+$/,
+          "Must be a valid YouTube Clip or Kick URL"
         ),
       }),
       responses: {
@@ -110,6 +110,7 @@ export const api = {
           channelName:  z.string(),
           duration:     z.string(),
           convertedUrl: z.string(),
+          platform:     z.enum(["youtube", "kick"]).optional(),
           videoId:      z.string(),
           startTime:    z.number(),
           endTime:      z.number(),

@@ -47,10 +47,138 @@ function extractFromUrl(url: string): { videoId: string | null; startTime: numbe
 }
 
 // ─────────────────────────────────────────────────────────────
+//  مشغّل Kick — يجرّب الـ Embed أولاً، يظهر الزر عند الفشل
+// ─────────────────────────────────────────────────────────────
+function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
+  const clipId  = clip.videoId || "";   // الـ slug المحفوظ في DB
+  // Kick يدعم embed للكليبات عبر: https://kick.com/embed/clip/CLIP_SLUG
+  const embedUrl = clipId ? `https://kick.com/embed/clip/${clipId}` : null;
+  const [iframeOk, setIframeOk] = useState<boolean | null>(embedUrl ? null : false);
+
+  const TAG_LABELS: Record<string, string> = {
+    Funny: "😂 مضحك", Epic: "⚡ ملحمي",
+    Glitch: "🐛 باج",  Skill: "🎯 مهارة", Horror: "👻 مرعب",
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.85, opacity: 0, y: 30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.85, opacity: 0, y: 30 }}
+        transition={{ type: "spring", damping: 22, stiffness: 260 }}
+        className="relative w-full max-w-4xl mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* زر الإغلاق */}
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 text-white/60 hover:text-white flex items-center gap-2 transition-colors"
+        >
+          <X className="w-5 h-5" /> إغلاق
+        </button>
+
+        <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_60px_rgba(83,252,31,0.15)] bg-black">
+          <div className="aspect-video w-full">
+            {/* ✅ جرّب الـ iframe أولاً */}
+            {iframeOk !== false && embedUrl ? (
+              <iframe
+                key={clip.id}
+                src={embedUrl}
+                className="w-full h-full border-0"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen
+                title={clip.title}
+                onLoad={() => setIframeOk(true)}
+                onError={() => setIframeOk(false)}
+              />
+            ) : (
+              /* Fallback — زر "شاهد على Kick" مضمون دائماً */
+              <div className="flex flex-col items-center justify-center h-full gap-5 bg-black">
+                {clip.thumbnailUrl && (
+                  <img
+                    src={clip.thumbnailUrl}
+                    alt={clip.title}
+                    className="absolute inset-0 w-full h-full object-cover opacity-20"
+                  />
+                )}
+                <div className="relative z-10 flex flex-col items-center gap-4">
+                  {/* شعار Kick */}
+                  <div className="w-16 h-16 rounded-2xl bg-[#53FC1F]/10 border border-[#53FC1F]/30 flex items-center justify-center">
+                    <svg viewBox="0 0 32 32" className="w-9 h-9" fill="#53FC1F">
+                      <path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z"/>
+                    </svg>
+                  </div>
+                  <p className="text-white/60 text-sm">لا يمكن تشغيل الكليب مدمجاً</p>
+                  <a
+                    href={clip.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 bg-[#53FC1F] hover:bg-[#45e018] text-black font-bold px-6 py-3 rounded-xl text-sm transition-colors shadow-[0_0_20px_rgba(83,252,31,0.4)]"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    شاهد على Kick ↗
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* شريط معلومات الكليب */}
+          <div className="bg-gradient-to-t from-black/90 to-black/60 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-white leading-tight mb-1 line-clamp-1">
+                  {clip.title}
+                </h2>
+                <div className="flex items-center gap-3 text-sm text-white/60">
+                  <span>بواسطة <span className="text-white/80 font-medium">{clip.submitterName || clip.submitter?.username || "زائر"}</span></span>
+                  {clip.tag && (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-white/30" />
+                      <span className="text-[#53FC1F] font-medium">{TAG_LABELS[clip.tag] ?? clip.tag}</span>
+                    </>
+                  )}
+                  <span className="w-1 h-1 rounded-full bg-white/30" />
+                  <span className="text-[#53FC1F]/70 text-xs font-semibold">Kick</span>
+                </div>
+              </div>
+              <a
+                href={clip.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-[#53FC1F]/70 transition-colors"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Kick
+              </a>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 //  مشغّل الشبح — يشغّل أي كليب داخل المنصة فورياً
 // ─────────────────────────────────────────────────────────────
 function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
-  // ✅ الطريقة الأولى: videoId مخزّن مباشرةً في DB (للكليبات الجديدة)
+  const isKick = clip.platform === "kick";
+
+  // ── Kick Player ──────────────────────────────────────────
+  if (isKick) {
+    return (
+      <KickGhostPlayer clip={clip} onClose={onClose} />
+    );
+  }
+
+  // ── YouTube Player ───────────────────────────────────────
   const videoId   = clip.videoId   || extractFromUrl(clip.url).videoId;
   const startTime = clip.startTime ?? extractFromUrl(clip.url).startTime;
   const endTime   = clip.endTime   ?? extractFromUrl(clip.url).endTime;

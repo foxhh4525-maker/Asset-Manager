@@ -28,6 +28,7 @@ async function ensureSystemUsers() {
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS video_id text;`);
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS start_time integer DEFAULT 0;`);
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS end_time integer DEFAULT 0;`);
+      await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS platform text DEFAULT 'youtube';`);
       c.release();
     } catch (e: any) {
       console.warn("[migration] submitter_name column:", e?.message);
@@ -175,7 +176,9 @@ export async function registerRoutes(
       const input = api.clips.create.input.parse(req.body);
       const submitterName: string = (req.body.submitterName ?? "").trim() || "زائر";
 
-      const metadata = await fetchYouTubeMetadata(input.url);
+      const metadata = isKickUrl(input.url)
+        ? await fetchKickMetadata(input.url)
+        : await fetchYouTubeMetadata(input.url);
 
       const submittedBy = req.isAuthenticated()
         ? (req.user as any).id
@@ -191,9 +194,10 @@ export async function registerRoutes(
         submittedBy,
         submitterName: req.isAuthenticated() ? (req.user as any).username : submitterName,
         // ✅ حفظ بيانات التشغيل مباشرةً — صفر parsing عند العرض
-        videoId:       metadata.videoId   || null,
-        startTime:     metadata.startTime || 0,
-        endTime:       metadata.endTime   || 0,
+        platform:      metadata.platform   || "youtube",
+        videoId:       metadata.videoId    || null,
+        startTime:     metadata.startTime  || 0,
+        endTime:       metadata.endTime    || 0,
         upvotes:       0,
         downvotes:     0,
         status:        "pending",
@@ -247,20 +251,25 @@ export async function registerRoutes(
 
   app.post(api.clips.fetchMetadata.path, async (req, res) => {
     try {
-      const metadata = await fetchYouTubeMetadata(req.body.url);
+      const metadata = isKickUrl(req.body.url)
+        ? await fetchKickMetadata(req.body.url)
+        : await fetchYouTubeMetadata(req.body.url);
       res.json(metadata);
     } catch {
-      res.status(400).json({ message: "Invalid YouTube URL" });
+      res.status(400).json({ message: "Invalid URL" });
     }
   });
 
-  // ✅ يحوّل أي رابط YouTube (حتى /clip/) إلى videoId + timestamps
+  // ✅ يحوّل أي رابط (YouTube أو Kick) إلى videoId + timestamps + platform
   app.get("/api/resolve-url", async (req, res) => {
     const url = req.query.url as string;
     if (!url) return res.status(400).json({ message: "url required" });
     try {
-      const meta = await fetchYouTubeMetadata(url);
+      const meta = isKickUrl(url)
+        ? await fetchKickMetadata(url)
+        : await fetchYouTubeMetadata(url);
       res.json({
+        platform:  meta.platform  || "youtube",
         videoId:   meta.videoId   || null,
         startTime: meta.startTime || 0,
         endTime:   meta.endTime   || 0,
@@ -275,6 +284,91 @@ export async function registerRoutes(
 }
 
 // ─────────────────────────────────────────────────────────────
+//  Kick Helpers
+// ─────────────────────────────────────────────────────────────
+
+/** هل الرابط من Kick؟ */
+function isKickUrl(url: string): boolean {
+  return /kick\.com/i.test(url);
+}
+
+/**
+ * يستخرج معرّف الكليب (slug) من روابط Kick المختلفة:
+ *   https://kick.com/clip/CLIP_SLUG
+ *   https://kick.com/username/clip/CLIP_SLUG  (رابط قديم)
+ *   https://kick.com/video/CLIP_SLUG
+ */
+function extractKickClipId(url: string): string | null {
+  const patterns = [
+    /kick\.com\/clip\/([A-Za-z0-9_-]+)/i,
+    /kick\.com\/[^/]+\/clip\/([A-Za-z0-9_-]+)/i,
+    /kick\.com\/video\/([A-Za-z0-9_-]+)/i,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m?.[1]) return m[1];
+  }
+  return null;
+}
+
+/**
+ * يجلب البيانات الوصفية لكليب Kick من Kick API العام
+ * ثم يبني نفس شكل كائن metadata الذي تعيده fetchYouTubeMetadata
+ */
+async function fetchKickMetadata(clipUrl: string) {
+  const clipId = extractKickClipId(clipUrl);
+
+  if (clipId) {
+    try {
+      const resp = await fetch(
+        `https://kick.com/api/v1/clips/${clipId}`,
+        {
+          headers: {
+            "User-Agent": "Mozilla/5.0",
+            "Accept":     "application/json",
+          },
+          signal: AbortSignal.timeout(8000),
+        }
+      );
+      if (resp.ok) {
+        const data = await resp.json() as any;
+        const clip   = data?.clip ?? data;
+        const title  = clip?.title       || clip?.clip_title   || "Kick Clip";
+        const thumb  = clip?.thumbnail   || clip?.thumbnail_url || "";
+        const channel= clip?.channel?.slug || clip?.channel_name || "Unknown";
+        const duration = clip?.duration  || 30;
+        return {
+          convertedUrl: clipUrl,
+          platform:     "kick" as const,
+          title,
+          thumbnailUrl: thumb,
+          channelName:  channel,
+          duration:     formatDuration(typeof duration === "number" ? duration : 30),
+          videoId:      clipId,    // نحفظ الـ slug هنا بدل videoId
+          startTime:    0,
+          endTime:      0,
+        };
+      }
+    } catch (err) {
+      console.warn("[fetchKickMetadata] API failed:", err);
+    }
+  }
+
+  // Fallback — البيانات من URL فقط بدون API
+  return {
+    convertedUrl: clipUrl,
+    platform:     "kick" as const,
+    title:        "Kick Clip",
+    thumbnailUrl: "",
+    channelName:  "Kick",
+    duration:     "0:30",
+    videoId:      clipId ?? "",
+    startTime:    0,
+    endTime:      0,
+  };
+}
+
+
 function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return "0:30";
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
@@ -302,6 +396,7 @@ async function fetchYouTubeMetadata(clipUrl: string) {
         const clipDuration = startTime && endTime && endTime > startTime ? endTime - startTime : 30;
         return {
           convertedUrl: videoId ? `https://www.youtube.com/watch?v=${videoId}&start=${startTime}&end=${endTime}` : clipUrl,
+          platform:     "youtube" as const,
           title:        (data.title as string) || "Gaming Clip",
           thumbnailUrl: (data.thumbnail_url as string) || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ""),
           channelName:  (data.author_name as string) || "Unknown Channel",
@@ -323,6 +418,7 @@ async function fetchYouTubeMetadata(clipUrl: string) {
 
   return {
     convertedUrl: clipUrl,
+    platform:     "youtube" as const,
     title:        "Gaming Clip",
     thumbnailUrl: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "",
     channelName:  "Unknown Channel",

@@ -237,6 +237,22 @@ export async function registerRoutes(
     }
   });
 
+  // ✅ يحوّل أي رابط YouTube (حتى /clip/) إلى videoId + timestamps
+  app.get("/api/resolve-url", async (req, res) => {
+    const url = req.query.url as string;
+    if (!url) return res.status(400).json({ message: "url required" });
+    try {
+      const meta = await fetchYouTubeMetadata(url);
+      res.json({
+        videoId:   meta.videoId   || null,
+        startTime: meta.startTime || 0,
+        endTime:   meta.endTime   || 0,
+      });
+    } catch {
+      res.status(400).json({ message: "Could not resolve URL" });
+    }
+  });
+
 
   return httpServer;
 }

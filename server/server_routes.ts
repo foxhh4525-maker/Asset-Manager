@@ -199,7 +199,7 @@ export async function registerRoutes(
         videoId:       metadata.videoId    || null,
         startTime:     metadata.startTime  || 0,
         endTime:       metadata.endTime    || 0,
-        submitterAvatar: (req.body as any).submitterAvatar || null,
+        submitterAvatar: (req.body as any).submitterAvatar || null, // ✅ أفاتار الناشر
         upvotes:       0,
         downvotes:     0,
         status:        "pending",

@@ -21,12 +21,13 @@ export const clips = pgTable("clips", {
   title: text("title").notNull(),
   thumbnailUrl: text("thumbnail_url").notNull(),
   channelName: text("channel_name").notNull(),
-  duration: text("duration").notNull(), // e.g., "0:30"
-  tag: text("tag").notNull(), // e.g., "Funny", "Fail"
+  duration: text("duration").notNull(),
+  tag: text("tag").notNull(),
   submittedBy: integer("submitted_by").references(() => users.id).notNull(),
-  submitterName: text("submitter_name"),  // اسم الزائر (إن لم يكن مسجلاً)
-  // ✅ بيانات التشغيل المباشر — تُحفظ لحظة الإرسال
-  platform:  text("platform").default("youtube"),   // "youtube" | "kick"
+  submitterName:   text("submitter_name"),    // اسم الزائر
+  submitterAvatar: text("submitter_avatar"),  // ✅ رابط أفاتار الزائر (dicebear URL)
+  // بيانات التشغيل
+  platform:  text("platform").default("youtube"),
   videoId:   text("video_id"),
   startTime: integer("start_time").default(0),
   endTime:   integer("end_time").default(0),
@@ -40,7 +41,7 @@ export const votes = pgTable("votes", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
   clipId: integer("clip_id").references(() => clips.id).notNull(),
-  value: integer("value").notNull(), // 1 for upvote, -1 for downvote
+  value: integer("value").notNull(),
 }, (t) => ({
   unq: {
     columns: [t.userId, t.clipId],
@@ -75,22 +76,22 @@ export const votesRelations = relations(votes, ({ one }) => ({
 // Schemas
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 
-// For clips, we need to specify which fields are required vs optional
 const baseClipSchema = createInsertSchema(clips).omit({ 
   id: true, 
   createdAt: true 
 });
 
 export const insertClipSchema = baseClipSchema.extend({
-  submittedBy: z.number().int().optional(),
-  submitterName: z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل").max(30).optional(),
-  platform:  z.enum(["youtube", "kick"]).optional(),
-  videoId:   z.string().optional(),
-  startTime: z.number().int().min(0).optional(),
-  endTime:   z.number().int().min(0).optional(),
-  status: z.enum(["pending", "approved", "rejected", "watched"]).optional(),
-  upvotes: z.number().int().min(0).optional(),
-  downvotes: z.number().int().min(0).optional(),
+  submittedBy:     z.number().int().optional(),
+  submitterName:   z.string().min(2, "الاسم يجب أن يكون حرفين على الأقل").max(30).optional(),
+  submitterAvatar: z.string().url().optional().nullable(), // ✅ جديد
+  platform:        z.enum(["youtube", "kick"]).optional(),
+  videoId:         z.string().optional(),
+  startTime:       z.number().int().min(0).optional(),
+  endTime:         z.number().int().min(0).optional(),
+  status:          z.enum(["pending", "approved", "rejected", "watched"]).optional(),
+  upvotes:         z.number().int().min(0).optional(),
+  downvotes:       z.number().int().min(0).optional(),
 });
 
 export const insertVoteSchema = createInsertSchema(votes).omit({ id: true });
@@ -103,6 +104,5 @@ export type InsertClip = z.infer<typeof insertClipSchema>;
 export type Vote = typeof votes.$inferSelect;
 export type InsertVote = z.infer<typeof insertVoteSchema>;
 
-// API Contract Types
 export type ClipResponse = Clip & { submitter?: { username: string; avatarUrl: string | null } };
-export type ClipVoteRequest = { value: number }; // 1 or -1
+export type ClipVoteRequest = { value: number };

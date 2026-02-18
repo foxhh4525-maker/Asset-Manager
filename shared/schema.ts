@@ -48,6 +48,33 @@ export const votes = pgTable("votes", {
   },
 }));
 
+// Artworks table used by DreamArtists feature (created in server migrations)
+export const artworks = pgTable("artworks", {
+  id: serial("id").primaryKey(),
+  imageData: text("image_data").notNull(),
+  artistName: text("artist_name").notNull().default("زائر"),
+  artistAvatar: text("artist_avatar"),
+  status: text("status").default("pending").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const artworkRatings = pgTable("artwork_ratings", {
+  id: serial("id").primaryKey(),
+  artworkId: integer("artwork_id").references(() => artworks.id).notNull(),
+  voterKey: text("voter_key").notNull(),
+  overall: integer("overall").notNull(),
+  quality: integer("quality"),
+  speed: integer("speed"),
+  communication: integer("communication"),
+  value: integer("value"),
+  comment: text("comment"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  unq: {
+    columns: [t.artworkId, t.voterKey],
+  },
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   clips: many(clips),
@@ -70,6 +97,17 @@ export const votesRelations = relations(votes, ({ one }) => ({
   clip: one(clips, {
     fields: [votes.clipId],
     references: [clips.id],
+  }),
+}));
+
+export const artworksRelations = relations(artworks, ({ many }) => ({
+  ratings: many(artworkRatings),
+}));
+
+export const artworkRatingsRelations = relations(artworkRatings, ({ one }) => ({
+  artwork: one(artworks, {
+    fields: [artworkRatings.artworkId],
+    references: [artworks.id],
   }),
 }));
 

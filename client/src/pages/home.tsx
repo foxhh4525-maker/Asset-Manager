@@ -4,115 +4,103 @@ import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Flame, Clock, Trophy, ExternalLink, Loader2 } from "lucide-react";
+import { Flame, Clock, Trophy, ExternalLink } from "lucide-react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import ReactPlayer from "react-player";
 
 // ─────────────────────────────────────────────────────────────
-//  مساعد: تحليل الرابط وتحديد نوعه
+//  مساعد: استخراج videoId و timestamps من أي رابط YouTube
 // ─────────────────────────────────────────────────────────────
-function parseClipUrl(url: string) {
-  if (!url) return { type: "unknown" as const, url };
+function parseYouTubeUrl(url: string): {
+  videoId: string | null;
+  startTime: number;
+  endTime: number;
+  rawUrl: string;
+} {
+  if (!url) return { videoId: null, startTime: 0, endTime: 0, rawUrl: url };
 
-  // رابط محلي مخزّن على السيرفر ✅
+  // /api/videos/ID_start-end.mp4 (رابط محلي قديم)
   if (url.startsWith("/api/videos/")) {
-    // استخرج start/end من اسم الملف: videoId_start-end.mp4
-    const match = url.match(/_(\d+)-(\d+)\.mp4$/);
-    const startTime = match ? parseInt(match[1]) : 0;
-    const endTime   = match ? parseInt(match[2]) : 0;
-    return { type: "local" as const, url, startTime, endTime };
+    const match = url.match(/\/([a-zA-Z0-9_-]{11})_?(\d+)?-?(\d+)?\.mp4$/);
+    return {
+      videoId:   match?.[1] ?? null,
+      startTime: match?.[2] ? parseInt(match[2]) : 0,
+      endTime:   match?.[3] ? parseInt(match[3]) : 0,
+      rawUrl:    url,
+    };
   }
 
-  // رابط /clip/ مكسور ❌
-  if (/youtube\.com\/clip\//.test(url)) {
-    return { type: "clip" as const, url };
-  }
-
-  // رابط watch?v= عادي ✅
   try {
     const u = new URL(url);
-    const videoId  = u.searchParams.get("v");
-    const startTime = parseInt(u.searchParams.get("start") ?? "0") || 0;
-    const endTime   = parseInt(u.searchParams.get("end")   ?? "0") || 0;
-    if (videoId) {
-      const cleanUrl = `https://www.youtube.com/watch?v=${videoId}`;
-      return { type: "youtube" as const, url: cleanUrl, videoId, startTime, endTime };
+    // watch?v= الرابط العادي
+    const v = u.searchParams.get("v");
+    if (v) {
+      return {
+        videoId:   v,
+        startTime: parseInt(u.searchParams.get("start") ?? "0") || 0,
+        endTime:   parseInt(u.searchParams.get("end")   ?? "0") || 0,
+        rawUrl:    url,
+      };
+    }
+    // youtu.be/ID
+    const short = url.match(/youtu\.be\/([\w-]{11})/);
+    if (short) {
+      return {
+        videoId:   short[1],
+        startTime: parseInt(u.searchParams.get("t") ?? "0") || 0,
+        endTime:   0,
+        rawUrl:    url,
+      };
     }
   } catch {}
 
-  return { type: "unknown" as const, url };
+  return { videoId: null, startTime: 0, endTime: 0, rawUrl: url };
 }
 
 // ─────────────────────────────────────────────────────────────
-//  مكوّن المشغّل الذكي
+//  مشغّل YouTube IFrame — موثوق 100%، يدعم timestamps
 // ─────────────────────────────────────────────────────────────
 function SmartPlayer({ clip }: { clip: any }) {
-  const info = parseClipUrl(clip.url);
+  const { videoId, startTime, endTime, rawUrl } = parseYouTubeUrl(clip.url);
 
-  // ── 1. فيديو محلي مخزّن على السيرفر ──────────────────────
-  if (info.type === "local") {
-    // #t=start,end يُخبر المتصفح ببداية ونهاية التشغيل
-    const fragment =
-      info.startTime || info.endTime
-        ? `#t=${info.startTime},${info.endTime}`
-        : "";
+  // ✅ لدينا videoId → نشغّل مباشرة عبر IFrame
+  if (videoId) {
+    const params = new URLSearchParams({
+      autoplay:       "1",
+      rel:            "0",
+      modestbranding: "1",
+      start:          String(startTime || 0),
+      enablejsapi:    "1",
+    });
+    if (endTime > 0) params.set("end", String(endTime));
+
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?${params}`;
+
     return (
-      <video
+      <iframe
         key={clip.id}
-        src={`${info.url}${fragment}`}
-        controls
-        autoPlay
-        playsInline
-        className="w-full h-full object-contain bg-black"
-        onError={(e) => console.warn("Video error:", e)}
-      >
-        متصفحك لا يدعم تشغيل الفيديو.
-      </video>
-    );
-  }
-
-  // ── 2. رابط YouTube watch?v= ──────────────────────────────
-  if (info.type === "youtube") {
-    return (
-      <ReactPlayer
-        key={`${clip.id}-yt`}
-        url={info.url}
-        playing
-        controls
-        width="100%"
-        height="100%"
-        config={{
-          youtube: {
-            playerVars: {
-              start:          info.startTime || 0,
-              ...(info.endTime > 0 ? { end: info.endTime } : {}),
-              rel:            0,
-              modestbranding: 1,
-              autoplay:       1,
-            },
-          },
-        }}
+        src={embedUrl}
+        className="w-full h-full border-0"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        allowFullScreen
+        title={clip.title}
       />
     );
   }
 
-  // ── 3. رابط /clip/ مكسور أو غير معروف → fallback ─────────
+  // ❌ لا يوجد videoId → زر مشاهدة على YouTube بدون spin وهمي
   return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 bg-black text-white">
-      <div className="text-center space-y-2 px-6">
-        <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
-        <p className="text-sm text-gray-300 font-medium">
-          جاري تحميل الفيديو على السيرفر...
-        </p>
-        <p className="text-xs text-gray-500">
-          سيكون جاهزاً خلال دقيقة، يمكنك مشاهدته على YouTube الآن
+    <div className="flex flex-col items-center justify-center h-full gap-5 bg-black text-white px-6 text-center">
+      <div className="space-y-2">
+        <p className="text-base font-semibold text-gray-200">{clip.title}</p>
+        <p className="text-sm text-gray-400">
+          هذا الكليب متاح مباشرة على YouTube
         </p>
       </div>
       <a
-        href={clip.url}
+        href={rawUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors mt-2"
+        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl text-sm font-bold transition-colors shadow-lg"
       >
         <ExternalLink className="w-4 h-4" />
         شاهد على YouTube
@@ -208,7 +196,7 @@ export default function Home() {
             <div className="p-6 bg-card">
               <h2 className="text-2xl font-bold font-display mb-2">{selectedClip.title}</h2>
               <div className="flex items-center gap-2 text-muted-foreground">
-                <span>Submitted by {selectedClip.submitter?.username}</span>
+                <span>Submitted by {selectedClip.submitterName || selectedClip.submitter?.username || "زائر"}</span>
                 <span className="w-1 h-1 rounded-full bg-muted-foreground" />
                 <span>{selectedClip.tag}</span>
               </div>

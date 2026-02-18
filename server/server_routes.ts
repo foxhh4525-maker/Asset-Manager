@@ -10,13 +10,6 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import express from "express";
 import path from "path";
-import { existsSync, mkdirSync } from "fs";
-import {
-  downloadAndStoreVideo,
-  VIDEOS_DIR,
-  getLocalVideoUrl,
-  getLocalVideoPath,
-} from "./VideoDownloadr";
 import { storage as st } from "./storage";
 
 // ─────────────────────────────────────────────────────────────
@@ -57,14 +50,6 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  if (!existsSync(VIDEOS_DIR)) mkdirSync(VIDEOS_DIR, { recursive: true });
-  app.use("/api/videos", express.static(VIDEOS_DIR, {
-    setHeaders: (res) => {
-      res.set("Accept-Ranges", "bytes");
-      res.set("Cache-Control", "public, max-age=86400");
-    },
-  }));
-
   const isProd = process.env.NODE_ENV === "production";
   const publicUrl = process.env.PUBLIC_URL || "";
   const cookieSecure = isProd || publicUrl.startsWith("https://");
@@ -197,16 +182,6 @@ export async function registerRoutes(
         status:        "pending",
       } as any);
 
-      if (metadata.videoId) {
-        (async () => {
-          try {
-            const { localUrl } = await downloadAndStoreVideo(metadata.videoId, metadata.startTime, metadata.endTime);
-            if (localUrl) await storage.updateClipUrl(clip.id, localUrl);
-          } catch (e) {
-            console.warn(`[clip ${clip.id}] download failed:`, e);
-          }
-        })();
-      }
 
       res.status(201).json(clip);
     } catch (err) {
@@ -262,28 +237,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/redownload-clips", async (req, res) => {
-    if (!req.isAuthenticated() || (req.user as any)?.role !== "admin")
-      return res.status(403).json({ message: "Forbidden" });
-    const clips = await storage.getClips({ status: "approved", sort: "new" });
-    const pending = (clips as any[]).filter((c) => !c.url?.startsWith("/api/videos/"));
-    res.json({ total: pending.length, message: "Re-download started" });
-    (async () => {
-      for (const clip of pending) {
-        try {
-          const u = new URL((clip as any).url);
-          const videoId = u.searchParams.get("v");
-          if (!videoId) continue;
-          const start = parseInt(u.searchParams.get("start") ?? "0") || 0;
-          const end   = parseInt(u.searchParams.get("end")   ?? "0") || 0;
-          const { localUrl } = await downloadAndStoreVideo(videoId, start, end);
-          if (localUrl) await storage.updateClipUrl((clip as any).id, localUrl);
-        } catch (e) {
-          console.warn(`[redownload] failed:`, e);
-        }
-      }
-    })();
-  });
 
   return httpServer;
 }

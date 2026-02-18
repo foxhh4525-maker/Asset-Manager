@@ -9,6 +9,7 @@ import Home from "@/pages/home";
 import SubmitPage from "@/pages/submit";
 import Dashboard from "@/pages/dashboard";
 import Studio from "@/pages/Studio";
+import AdminLogin from "@/pages/admin-login";
 import { useUser } from "@/hooks/use-auth";
 
 // ✅ حماية صفحة الاستديو — يُسمح فقط للأدمن

@@ -203,7 +203,6 @@ export async function registerRoutes(
         status:        "pending",
       } as any);
 
-
       res.status(201).json(clip);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -279,8 +278,23 @@ export async function registerRoutes(
     }
   });
 
-
   return httpServer;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Helpers — مشتركة بين YouTube و Kick
+// ─────────────────────────────────────────────────────────────
+
+/** تحوّل عدد الثواني إلى نص مثل "1:23" أو "1:02:05" */
+function formatDuration(seconds: number): string {
+  if (!seconds || seconds <= 0) return "0:30";
+  const hrs  = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  if (hrs > 0) {
+    return `${hrs}:${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  }
+  return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -294,14 +308,16 @@ function isKickUrl(url: string): boolean {
 
 /**
  * يستخرج معرّف الكليب (slug) من روابط Kick المختلفة:
- *   https://kick.com/clip/CLIP_SLUG
- *   https://kick.com/username/clip/CLIP_SLUG  (رابط قديم)
- *   https://kick.com/video/CLIP_SLUG
+ *   https://kick.com/clip/CLIP_ID
+ *   https://kick.com/username/clips/CLIP_ID   ← الشكل الجديد
+ *   https://kick.com/username/clip/CLIP_ID    (رابط قديم)
+ *   https://kick.com/video/CLIP_ID
  */
 function extractKickClipId(url: string): string | null {
   const patterns = [
     /kick\.com\/clip\/([A-Za-z0-9_-]+)/i,
-    /kick\.com\/[^/]+\/clip\/([A-Za-z0-9_-]+)/i,
+    /kick\.com\/[^/]+\/clips?\/([A-Za-z0-9_-]+)/i,   // clips أو clip
+    /kick\.com\/clips\/([A-Za-z0-9_-]+)/i,
     /kick\.com\/video\/([A-Za-z0-9_-]+)/i,
   ];
   for (const p of patterns) {
@@ -321,7 +337,7 @@ async function fetchKickMetadata(clipUrl: string) {
   if (clipId) {
     try {
       const resp = await fetch(
-        `https://kick.com/api/v1/clips/${clipId}`,
+        `https://kick.com/api/v2/clips/${clipId}`,
         {
           headers: {
             "User-Agent": "Mozilla/5.0",
@@ -332,11 +348,11 @@ async function fetchKickMetadata(clipUrl: string) {
       );
       if (resp.ok) {
         const data = await resp.json() as any;
-        const clip   = data?.clip ?? data;
-        const title  = clip?.title       || clip?.clip_title   || "Kick Clip";
-        const thumb  = clip?.thumbnail   || clip?.thumbnail_url || "";
-        const channel= clip?.channel?.slug || clip?.channel_name || "Unknown";
-        const duration = clip?.duration  || 30;
+        const clip    = data?.clip ?? data;
+        const title   = clip?.title        || clip?.clip_title    || "Kick Clip";
+        const thumb   = clip?.thumbnail    || clip?.thumbnail_url || "";
+        const channel = clip?.channel?.slug || clip?.channel_name  || "Unknown";
+        const duration = clip?.duration    || 30;
         return {
           convertedUrl: clipUrl,
           platform:     "kick" as const,
@@ -368,11 +384,9 @@ async function fetchKickMetadata(clipUrl: string) {
   };
 }
 
-
-function formatDuration(seconds: number): string {
-  if (!seconds || seconds <= 0) return "0:30";
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
-}
+// ─────────────────────────────────────────────────────────────
+//  YouTube Helpers
+// ─────────────────────────────────────────────────────────────
 
 function extractVideoId(url: string): string | null {
   return url.match(/[?&]v=([\w-]{11})/)?.[1] || url.match(/youtu\.be\/([\w-]{11})/)?.[1] || null;

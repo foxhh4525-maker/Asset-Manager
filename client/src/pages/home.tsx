@@ -51,8 +51,8 @@ function extractFromUrl(url: string): { videoId: string | null; startTime: numbe
 // ─────────────────────────────────────────────────────────────
 function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
   const clipId  = clip.videoId || "";   // الـ slug المحفوظ في DB
-  // Kick يدعم embed للكليبات عبر: https://kick.com/embed/clip/CLIP_SLUG
-  const embedUrl = clipId ? `https://kick.com/embed/clip/${clipId}` : null;
+  // ✅ رابط embed الصحيح لـ Kick
+  const embedUrl = clipId ? `https://player.kick.com/clips/${clipId}` : null;
   const [iframeOk, setIframeOk] = useState<boolean | null>(embedUrl ? null : false);
 
   const TAG_LABELS: Record<string, string> = {

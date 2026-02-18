@@ -72,7 +72,7 @@ export class DatabaseStorage implements IStorage {
       },
     })
     .from(clips)
-    .innerJoin(users, eq(clips.submittedBy, users.id));
+    .leftJoin(users, eq(clips.submittedBy, users.id));
 
     if (filters?.status) {
       // @ts-ignore

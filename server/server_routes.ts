@@ -30,6 +30,16 @@ async function ensureSystemUsers() {
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS end_time integer DEFAULT 0;`);
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS platform text DEFAULT 'youtube';`);
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS submitter_avatar text;`);
+      await c.query(`
+        CREATE TABLE IF NOT EXISTS artworks (
+          id            serial PRIMARY KEY,
+          image_data    text NOT NULL,
+          artist_name   text NOT NULL DEFAULT 'زائر',
+          artist_avatar text,
+          status        text NOT NULL DEFAULT 'pending',
+          created_at    timestamp NOT NULL DEFAULT now()
+        );
+      `);
       c.release();
     } catch (e: any) {
       console.warn("[migration] submitter_name column:", e?.message);
@@ -199,7 +209,7 @@ export async function registerRoutes(
         videoId:       metadata.videoId    || null,
         startTime:     metadata.startTime  || 0,
         endTime:       metadata.endTime    || 0,
-        submitterAvatar: (req.body as any).submitterAvatar || null, // ✅ أفاتار الناشر
+        submitterAvatar: (req.body as any).submitterAvatar || null,
         upvotes:       0,
         downvotes:     0,
         status:        "pending",
@@ -278,6 +288,74 @@ export async function registerRoutes(
     } catch {
       res.status(400).json({ message: "Could not resolve URL" });
     }
+  });
+
+  // ─── Artworks (رسامين دريم) ────────────────────────────────
+
+  // GET /api/artworks?status=approved|pending|rejected
+  app.get("/api/artworks", async (req, res) => {
+    const status = (req.query.status as string) || "approved";
+    // الأدمن فقط يرى الانتظار والمرفوض
+    if (status !== "approved" && (!req.isAuthenticated() || (req.user as any).role !== "admin")) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    if (!pool) return res.json([]);
+    const c = await pool.connect();
+    try {
+      const r = await c.query(
+        `SELECT id, image_data AS "imageData", artist_name AS "artistName",
+                artist_avatar AS "artistAvatar", status, created_at AS "createdAt"
+         FROM artworks WHERE status = $1 ORDER BY created_at DESC`,
+        [status]
+      );
+      res.json(r.rows);
+    } finally { c.release(); }
+  });
+
+  // POST /api/artworks
+  app.post("/api/artworks", async (req, res) => {
+    const { imageData, artistName, artistAvatar } = req.body;
+    if (!imageData || !imageData.startsWith("data:image")) {
+      return res.status(400).json({ message: "Invalid image data" });
+    }
+    if (!pool) return res.status(500).json({ message: "No DB" });
+    const c = await pool.connect();
+    try {
+      const r = await c.query(
+        `INSERT INTO artworks (image_data, artist_name, artist_avatar, status)
+         VALUES ($1, $2, $3, 'pending') RETURNING id, artist_name AS "artistName", status, created_at AS "createdAt"`,
+        [imageData, (artistName || "زائر").slice(0, 30), artistAvatar || null]
+      );
+      res.status(201).json(r.rows[0]);
+    } finally { c.release(); }
+  });
+
+  // PATCH /api/artworks/:id/status
+  app.patch("/api/artworks/:id/status", async (req, res) => {
+    if (!req.isAuthenticated() || (req.user as any).role !== "admin")
+      return res.status(403).json({ message: "Forbidden" });
+    const id = parseInt(req.params.id);
+    const { status } = req.body;
+    if (!["approved","rejected","pending"].includes(status)) return res.status(400).json({ message: "Invalid status" });
+    if (!pool) return res.status(500).json({ message: "No DB" });
+    const c = await pool.connect();
+    try {
+      await c.query(`UPDATE artworks SET status = $1 WHERE id = $2`, [status, id]);
+      res.json({ success: true });
+    } finally { c.release(); }
+  });
+
+  // DELETE /api/artworks/:id
+  app.delete("/api/artworks/:id", async (req, res) => {
+    if (!req.isAuthenticated() || (req.user as any).role !== "admin")
+      return res.status(403).json({ message: "Forbidden" });
+    const id = parseInt(req.params.id);
+    if (!pool) return res.status(500).json({ message: "No DB" });
+    const c = await pool.connect();
+    try {
+      await c.query(`DELETE FROM artworks WHERE id = $1`, [id]);
+      res.json({ success: true });
+    } finally { c.release(); }
   });
 
   return httpServer;

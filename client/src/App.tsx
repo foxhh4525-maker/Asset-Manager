@@ -10,6 +10,8 @@ import SubmitPage from "@/pages/submit";
 import Dashboard from "@/pages/dashboard";
 import Studio from "@/pages/Studio";
 import AdminLogin from "@/pages/admin-login";
+import DrawPage from "@/pages/DrawPage";
+import DreamArtists from "@/pages/DreamArtists";
 import { useUser } from "@/hooks/use-auth";
 
 // ✅ حماية صفحة الاستديو — يُسمح فقط للأدمن
@@ -38,6 +40,8 @@ function Router() {
       <Route path="/submit" component={SubmitPage} />
       <Route path="/dashboard" component={Dashboard} />
       <Route path="/admin-login" component={AdminLogin} />
+      <Route path="/dream-artists" component={DreamArtists} />
+      <Route path="/draw" component={DrawPage} />
       {/* ✅ /studio محمي — غير الأدمن يُعاد توجيهه للرئيسية */}
       <Route path="/studio">
         <AdminRoute component={Studio} />

@@ -8,7 +8,7 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Gamepad2, LogOut, Plus, MonitorPlay, Menu, Lock, Pencil } from "lucide-react";
+import { Gamepad2, LogOut, Plus, MonitorPlay, Menu, Lock, Pencil, Palette } from "lucide-react";
 import { useState } from "react";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -62,7 +62,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-2">
-            <NavLink href="/" icon={Gamepad2}>الرسوم</NavLink>
+            <NavLink href="/" icon={Gamepad2}>الكليبات</NavLink>
+            <NavLink href="/dream-artists" icon={Palette}>رسامين دريم</NavLink>
             {isAdmin && <NavLink href="/studio" icon={MonitorPlay}>الاستوديو</NavLink>}
           </div>
 
@@ -144,7 +145,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </SheetTrigger>
             <SheetContent side="right" className="bg-card border-l border-border/50">
               <div className="flex flex-col gap-4 mt-8">
-                <NavLink href="/" icon={Gamepad2} onClick={() => setMobileOpen(false)}>الرسوم</NavLink>
+                <NavLink href="/" icon={Gamepad2} onClick={() => setMobileOpen(false)}>الكليبات</NavLink>
+                <NavLink href="/dream-artists" icon={Palette} onClick={() => setMobileOpen(false)}>رسامين دريم 🎨</NavLink>
                 {isAdmin && (
                   <NavLink href="/studio" icon={MonitorPlay} onClick={() => setMobileOpen(false)}>الاستوديو</NavLink>
                 )}

@@ -11,6 +11,7 @@ import {
   PaintBucket, Type, Loader2, CheckCircle2, X, Sparkles, Pencil
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { queryClient } from "@/lib/queryClient";
 
 type Tool = "pen" | "brush" | "eraser" | "fill" | "line" | "rect" | "circle" | "text";
 
@@ -311,7 +312,12 @@ export default function DrawPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageData, artistName, artistAvatar }),
       });
-      if (res.ok) { setSubmitted(true); setTimeout(() => setLocation("/dream-artists"), 2000); }
+      if (res.ok) {
+        setSubmitted(true);
+        // ✅ أبلغ الكاش أن هناك رسمة جديدة → يُعيد الجلب عند العودة
+        queryClient.invalidateQueries({ queryKey: ["/api/artworks"] });
+        setTimeout(() => setLocation("/dream-artists"), 2000);
+      }
     } catch {}
     setSubmitting(false);
   };

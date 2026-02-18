@@ -104,10 +104,14 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
 
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Avatar className="w-6 h-6 ring-1 ring-border">
-              <AvatarImage src={clip.submitter?.avatarUrl} />
-              <AvatarFallback><User className="w-3 h-3" /></AvatarFallback>
+              <AvatarImage src={clip.submitter?.avatarUrl || undefined} />
+              <AvatarFallback className="bg-primary/10 text-[10px] text-primary font-bold">
+                {(clip.submitterName || clip.submitter?.username || "؟").slice(0, 1)}
+              </AvatarFallback>
             </Avatar>
-            <span className="truncate max-w-[120px]">{clip.submitter?.username || "مجهول"}</span>
+            <span className="truncate max-w-[120px]">
+              {clip.submitterName || clip.submitter?.username || "زائر"}
+            </span>
             <span className="mx-1">•</span>
             <Clock className="w-3 h-3" />
             <span>

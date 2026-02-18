@@ -45,11 +45,21 @@ function getPos(e: React.MouseEvent | React.TouchEvent, canvas: HTMLCanvasElemen
 }
 
 // ─── Flood Fill ─────────────────────────────────────────────
+function colorMatch(data: Uint8ClampedArray, idx: number, tr: number, tg: number, tb: number, ta: number, tolerance = 30) {
+  return Math.abs(data[idx] - tr) <= tolerance &&
+         Math.abs(data[idx+1] - tg) <= tolerance &&
+         Math.abs(data[idx+2] - tb) <= tolerance &&
+         Math.abs(data[idx+3] - ta) <= tolerance;
+}
+
 function floodFill(ctx: CanvasRenderingContext2D, x: number, y: number, fillColor: string) {
   const img    = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
   const data   = img.data;
+  const w      = ctx.canvas.width;
+  const h      = ctx.canvas.height;
   const cx = Math.floor(x); const cy = Math.floor(y);
-  const idx = (cy * ctx.canvas.width + cx) * 4;
+  if (cx < 0 || cy < 0 || cx >= w || cy >= h) return;
+  const idx = (cy * w + cx) * 4;
   const tr = data[idx], tg = data[idx+1], tb = data[idx+2], ta = data[idx+3];
 
   const r = parseInt(fillColor.slice(1,3), 16);
@@ -57,16 +67,32 @@ function floodFill(ctx: CanvasRenderingContext2D, x: number, y: number, fillColo
   const b = parseInt(fillColor.slice(5,7), 16);
 
   if (tr===r && tg===g && tb===b) return;
-  const stack = [[cx, cy]];
+
+  const visited = new Uint8Array(w * h);
+  const stack = [cx + cy * w];
+  visited[cx + cy * w] = 1;
+
   while (stack.length) {
-    const [px, py] = stack.pop()!;
-    const i = (py * ctx.canvas.width + px) * 4;
-    if (data[i]!==tr || data[i+1]!==tg || data[i+2]!==tb || data[i+3]!==ta) continue;
+    const pos = stack.pop()!;
+    const px = pos % w;
+    const py = Math.floor(pos / w);
+    const i = pos * 4;
     data[i]=r; data[i+1]=g; data[i+2]=b; data[i+3]=255;
-    if (px>0) stack.push([px-1,py]);
-    if (px<ctx.canvas.width-1) stack.push([px+1,py]);
-    if (py>0) stack.push([px,py-1]);
-    if (py<ctx.canvas.height-1) stack.push([px,py+1]);
+
+    const neighbors = [
+      px > 0 ? pos - 1 : -1,
+      px < w - 1 ? pos + 1 : -1,
+      py > 0 ? pos - w : -1,
+      py < h - 1 ? pos + w : -1,
+    ];
+    for (const n of neighbors) {
+      if (n >= 0 && !visited[n]) {
+        visited[n] = 1;
+        if (colorMatch(data, n * 4, tr, tg, tb, ta)) {
+          stack.push(n);
+        }
+      }
+    }
   }
   ctx.putImageData(img, 0, 0);
 }
@@ -102,18 +128,23 @@ export default function DrawPage() {
     saveHistory();
   }, []);
 
+  const histIdxRef = useRef(-1);
+  histIdxRef.current = histIdx;
+
   const saveHistory = useCallback(() => {
     const canvas = canvasRef.current!;
     const ctx    = canvas.getContext("2d")!;
     const img    = ctx.getImageData(0, 0, canvas.width, canvas.height);
     setHistory(prev => {
-      const next = prev.slice(0, histIdx + 1);
+      const currentIdx = histIdxRef.current;
+      const next = prev.slice(0, currentIdx + 1);
       next.push(img);
       if (next.length > 50) next.shift();
+      histIdxRef.current = next.length - 1;
       setHistIdx(next.length - 1);
       return next;
     });
-  }, [histIdx]);
+  }, []);
 
   const undo = useCallback(() => {
     if (histIdx <= 0) return;
@@ -136,6 +167,10 @@ export default function DrawPage() {
   const clearCanvas = useCallback(() => {
     const canvas = canvasRef.current!;
     const ctx    = canvas.getContext("2d")!;
+    // امسح الـ overlay أيضاً
+    const overlay = overlayRef.current!;
+    const octx    = overlay.getContext("2d")!;
+    octx.clearRect(0, 0, overlay.width, overlay.height);
     ctx.fillStyle = "#111111";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     saveHistory();
@@ -235,26 +270,22 @@ export default function DrawPage() {
     if (tool === "pen" || tool === "brush" || tool === "eraser") {
       ctx.closePath();
     } else if (startPt) {
-      // دمج الـ overlay في الكانفاس الرئيسي
-      ctx.drawImage(overlay, 0, 0);
+      // امسح الـ overlay وارسم الشكل النهائي مباشرة على الكانفاس الرئيسي
       octx.clearRect(0, 0, overlay.width, overlay.height);
 
+      setupCtx(ctx);
+      ctx.beginPath();
       if (tool === "line") {
-        setupCtx(ctx);
-        ctx.beginPath();
         ctx.moveTo(startPt.x, startPt.y);
         ctx.lineTo(pt.x, pt.y);
         ctx.stroke();
       } else if (tool === "rect") {
-        setupCtx(ctx);
         const dx = pt.x - startPt.x;
         const dy = pt.y - startPt.y;
         ctx.strokeRect(startPt.x, startPt.y, dx, dy);
       } else if (tool === "circle") {
-        setupCtx(ctx);
         const dx = pt.x - startPt.x;
         const dy = pt.y - startPt.y;
-        ctx.beginPath();
         ctx.ellipse(startPt.x + dx/2, startPt.y + dy/2, Math.abs(dx)/2, Math.abs(dy)/2, 0, 0, Math.PI*2);
         ctx.stroke();
       }

@@ -75,8 +75,10 @@ function SmartPlayer({ url, clipId, clip }: { url: string; clipId: number; clip?
   const st = clip?.startTime || 0;
   const en = clip?.endTime   || 0;
   if (/youtube\.com|youtu\.be/i.test(url || "")) {
+    const RP: any = ReactPlayer;
+
     return (
-      <ReactPlayer
+      <RP
         key={`${clipId}-yt`}
         url={url}
         width="100%"
@@ -85,13 +87,14 @@ function SmartPlayer({ url, clipId, clip }: { url: string; clipId: number; clip?
         playing={false}
         config={{
           youtube: {
+            // react-player types can be picky; cast here to avoid excess type errors
             playerVars: {
               start: st || 0,
               ...(en > 0 ? { end: en } : {}),
               rel: 0, modestbranding: 1,
-            },
-          },
-        }}
+            } as any,
+          } as any,
+        } as any}
       />
     );
   }
@@ -183,7 +186,7 @@ export default function Studio() {
               <h3 className="font-semibold mb-3 text-right">قائمة الانتظار ({clips.length})</h3>
               <ScrollArea className="h-[400px]">
                 <div className="space-y-2">
-                  {clips.map((clip, index) => (
+                  {clips.map((clip: any, index: number) => (
                     <motion.div
                       key={clip.id}
                       initial={{ opacity: 0, x: 20 }}

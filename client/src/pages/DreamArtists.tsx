@@ -263,7 +263,7 @@ function RatingModal({
           <div className="w-10 h-1 bg-white/20 rounded-full" />
         </div>
 
-        {AnimatePresence && submitted ? (
+        {submitted ? (
           /* Success State */
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}

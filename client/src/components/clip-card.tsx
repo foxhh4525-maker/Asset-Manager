@@ -47,20 +47,28 @@ interface ClipCardProps {
 }
 
 // ── مكوّن الأفاتار — يعرض الصورة الحقيقية أو يرجع للحرف ──
-function SubmitterAvatar({ clip }: { clip: any }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const displayName = clip.submitterName || clip.submitter?.username || "زائر";
-  // ✅ أولوية: submitterAvatar → submitter.avatarUrl → حرف ملون
-  const avatarSrc   = clip.submitterAvatar || clip.submitter?.avatarUrl || null;
-  const avatarColor = nameColor(displayName);
-  const avatarLetter= nameInitial(displayName);
+// failedUrls: cache دائم لتجنب تكرار محاولة تحميل صور فاشلة
+const failedAvatarUrls = new Set<string>();
 
-  if (avatarSrc && !imgFailed) {
+function SubmitterAvatar({ clip }: { clip: any }) {
+  const displayName  = clip.submitterName || clip.submitter?.username || "زائر";
+  const avatarSrc    = clip.submitterAvatar || clip.submitter?.avatarUrl || null;
+  const avatarColor  = nameColor(displayName);
+  const avatarLetter = nameInitial(displayName);
+  const [failed, setFailed] = useState(() => !!avatarSrc && failedAvatarUrls.has(avatarSrc));
+
+  // ✅ إذا تغير الـ avatarSrc نعيد المحاولة
+  const handleError = () => {
+    if (avatarSrc) failedAvatarUrls.add(avatarSrc);
+    setFailed(true);
+  };
+
+  if (avatarSrc && !failed) {
     return (
       <img
         src={avatarSrc}
         alt={displayName}
-        onError={() => setImgFailed(true)}
+        onError={handleError}
         className="w-7 h-7 rounded-full flex-shrink-0 ring-2 ring-primary/30 object-cover bg-background"
       />
     );

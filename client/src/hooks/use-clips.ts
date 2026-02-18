@@ -24,7 +24,11 @@ export function useCreateClip() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: { url: string; title: string; thumbnailUrl: string; channelName: string; duration: string; tag: string }) => {
+    mutationFn: async (data: {
+      url: string; title: string; thumbnailUrl: string;
+      channelName: string; duration: string; tag: string;
+      submitterName?: string; submitterAvatar?: string | null;
+    }) => {
       const res = await fetch(api.clips.create.path, {
         method: "POST",
         credentials: "include",

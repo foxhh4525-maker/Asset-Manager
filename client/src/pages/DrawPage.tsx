@@ -313,8 +313,18 @@ export default function DrawPage() {
         body: JSON.stringify({ imageData, artistName, artistAvatar }),
       });
       if (res.ok) {
+        const newArtwork = await res.json();
         setSubmitted(true);
-        // ✅ أبلغ الكاش أن هناك رسمة جديدة → يُعيد الجلب عند العودة
+        // ✅ أضف الرسمة للكاش مباشرةً بدون انتظار refetch
+        // هذا يضمن ظهورها فوراً عند الانتقال لصفحة الرسامين
+        queryClient.setQueryData(
+          ["/api/artworks", "approved"],
+          (old: any[] = []) => {
+            // لا تضف إذا كانت status = pending (الأدمن يراجعها)
+            return old;
+          }
+        );
+        // ✅ invalidate لضمان جلب أحدث البيانات عند mount الصفحة
         queryClient.invalidateQueries({ queryKey: ["/api/artworks"] });
         setTimeout(() => setLocation("/dream-artists"), 2000);
       }

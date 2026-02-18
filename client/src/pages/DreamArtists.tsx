@@ -9,6 +9,39 @@ import {
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
+// ─── Stable avatar error cache (persists across re-renders) ────────
+const failedArtworkAvatars = new Set<string>();
+
+// ─── مكوّن أفاتار الفنان ─────────────────────────────────────────
+function ArtistAvatar({ art, size = "sm" }: { art: Artwork; size?: "sm" | "md" | "lg" }) {
+  const hue = art.artistName.charCodeAt(0) * 37 % 360;
+  const [failed, setFailed] = useState(
+    () => !!art.artistAvatar && failedArtworkAvatars.has(art.artistAvatar)
+  );
+  const handleError = () => {
+    if (art.artistAvatar) failedArtworkAvatars.add(art.artistAvatar);
+    setFailed(true);
+  };
+  const sizeMap = {
+    sm:  "w-8 h-8 rounded-full border border-purple-500/30 text-xs",
+    md:  "w-12 h-12 rounded-2xl border border-purple-500/30 text-sm",
+    lg:  "w-14 h-14 rounded-full border-2 border-purple-500/50 text-xl",
+  };
+  const cls = sizeMap[size];
+  if (art.artistAvatar && !failed) {
+    return (
+      <img src={art.artistAvatar} alt={art.artistName} onError={handleError}
+        className={`${cls} flex-shrink-0 object-cover bg-[#0d0d1a]`} />
+    );
+  }
+  return (
+    <div className={`${cls} flex-shrink-0 flex items-center justify-center text-white font-black`}
+      style={{ background: `hsl(${hue}, 60%, 40%)` }}>
+      {art.artistName[0]}
+    </div>
+  );
+}
+
 // ─── Types ──────────────────────────────────────────────────────
 interface Artwork {
   id: number;
@@ -30,6 +63,8 @@ function useArtworks(status = "approved") {
   return useQuery<Artwork[]>({
     queryKey: ["/api/artworks", status],
     queryFn: () => fetch(`/api/artworks?status=${status}`).then(r => r.json()),
+    staleTime: 0,          // ✅ دائماً يعيد الجلب عند الانتقال للصفحة
+    refetchOnMount: true,  // ✅ يجلب عند كل mount للصفحة
   });
 }
 
@@ -285,17 +320,7 @@ function RatingModal({
           <div className="p-5 space-y-5">
             {/* Header */}
             <div className="flex items-center gap-3 border-b border-white/10 pb-4">
-              {art.artistAvatar ? (
-                <img src={art.artistAvatar} alt={art.artistName}
-                  className="w-12 h-12 rounded-2xl object-cover border border-purple-500/30 flex-shrink-0" />
-              ) : (
-                <div
-                  className="w-12 h-12 rounded-2xl flex items-center justify-center text-white text-lg font-black flex-shrink-0 border border-purple-500/30"
-                  style={{ background: `hsl(${avatarStyle}, 60%, 40%)` }}
-                >
-                  {art.artistName[0]}
-                </div>
-              )}
+              <ArtistAvatar art={art} size="md" />
               <div className="flex-1 min-w-0">
                 <p className="text-white font-black text-base truncate">{art.artistName}</p>
                 <p className="text-purple-400 text-xs flex items-center gap-1 mt-0.5">
@@ -467,17 +492,7 @@ function ArtCard({ art, onOpen, onRate, isAdmin, onAction }: {
       <div className="p-3 space-y-2">
         {/* Artist row */}
         <div className="flex items-center gap-2">
-          {art.artistAvatar ? (
-            <img src={art.artistAvatar} alt={art.artistName}
-              className="w-8 h-8 rounded-full border border-purple-500/30 flex-shrink-0 object-cover bg-[#0d0d1a]" />
-          ) : (
-            <div
-              className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xs font-black border border-purple-500/30"
-              style={{ background: `hsl(${avatarHue}, 60%, 40%)` }}
-            >
-              {art.artistName[0]}
-            </div>
-          )}
+          <ArtistAvatar art={art} size="sm" />
           <div className="flex-1 min-w-0">
             <p className="text-white font-semibold text-sm truncate">{art.artistName}</p>
             <p className="text-white/35 text-xs flex items-center gap-1">
@@ -540,17 +555,7 @@ function ArtViewer({ art, onClose, onRate }: {
           />
           <div className="p-4 sm:p-5">
             <div className="flex items-center gap-3 mb-4">
-              {art.artistAvatar ? (
-                <img src={art.artistAvatar} alt={art.artistName}
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 border-purple-500/50 object-cover bg-[#0d0d1a] flex-shrink-0" />
-              ) : (
-                <div
-                  className="w-12 h-12 sm:w-14 sm:h-14 rounded-full flex items-center justify-center text-white text-xl font-black border-2 border-purple-500/50 flex-shrink-0"
-                  style={{ background: `hsl(${avatarHue}, 60%, 40%)` }}
-                >
-                  {art.artistName[0]}
-                </div>
-              )}
+              <ArtistAvatar art={art} size="lg" />
               <div className="flex-1 min-w-0">
                 <p className="text-white font-black text-lg sm:text-xl truncate">{art.artistName}</p>
                 <p className="text-purple-400 text-xs sm:text-sm flex items-center gap-1 mt-0.5">

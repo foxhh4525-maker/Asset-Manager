@@ -345,7 +345,13 @@ export async function registerRoutes(
     try {
       const r = await c.query(
         `INSERT INTO artworks (image_data, artist_name, artist_avatar, status)
-         VALUES ($1, $2, $3, 'pending') RETURNING id, artist_name AS "artistName", status, created_at AS "createdAt"`,
+         VALUES ($1, $2, $3, 'pending')
+         RETURNING id,
+                   image_data    AS "imageData",
+                   artist_name   AS "artistName",
+                   artist_avatar AS "artistAvatar",
+                   status,
+                   created_at    AS "createdAt"`,
         [imageData, (artistName || "زائر").slice(0, 30), artistAvatar || null]
       );
       res.status(201).json(r.rows[0]);

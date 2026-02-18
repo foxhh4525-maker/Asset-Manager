@@ -239,98 +239,126 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
 }
 
 // ─────────────────────────────────────────────────────────────
-//  المشغّل الرئيسي — YouTube + Kick
+//  مشغّل كليبات YouTube (youtube.com/clip/) — لا تدعم embed
 // ─────────────────────────────────────────────────────────────
-function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
-  // ✅ اكتشاف المنصة من platform أو من الـ URL احتياطياً
-  const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
-
-  if (isKick) {
-    return <KickGhostPlayer clip={clip} onClose={onClose} />;
-  }
-
-  // ── YouTube Player ───────────────────────────────────────
-  const embedUrl = resolveYouTubeEmbedUrl(clip);
-  const videoId  = clip.videoId || extractFromUrl(clip.url).videoId;
-  const startTime = clip.startTime ?? 0;
-  const endTime   = clip.endTime   ?? 0;
-
+function YouTubeClipPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
+  const directUrl = clip.url?.startsWith("http") ? clip.url : "https://youtube.com";
   const TAG_LABELS: Record<string, string> = {
-    Funny:  "😂 مضحك",  Epic:   "⚡ ملحمي",
-    Glitch: "🐛 باج",   Skill:  "🎯 مهارة",  Horror: "👻 مرعب",
+    Funny: "😂 مضحك", Epic: "⚡ ملحمي",
+    Glitch: "🐛 باج", Skill: "🎯 مهارة", Horror: "👻 مرعب",
   };
-
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md"
-      onClick={onClose}
-    >
-      <motion.div
-        initial={{ scale: 0.85, opacity: 0, y: 30 }}
-        animate={{ scale: 1, opacity: 1, y: 0 }}
-        exit={{ scale: 0.85, opacity: 0, y: 30 }}
-        transition={{ type: "spring", damping: 22, stiffness: 260 }}
-        className="relative w-full max-w-4xl mx-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          onClick={onClose}
-          className="absolute -top-12 right-0 text-white/60 hover:text-white flex items-center gap-2 transition-colors"
-        >
+      onClick={onClose}>
+      <motion.div initial={{ scale: 0.85, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.85, opacity: 0, y: 30 }} transition={{ type: "spring", damping: 22, stiffness: 260 }}
+        className="relative w-full max-w-4xl mx-4" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute -top-12 right-0 text-white/60 hover:text-white flex items-center gap-2 transition-colors">
           <X className="w-5 h-5" /> إغلاق
         </button>
+        <div className="relative rounded-2xl overflow-hidden border border-red-500/20 shadow-[0_0_60px_rgba(239,68,68,0.15)] bg-black">
+          <div className="aspect-video w-full relative bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
+            {clip.thumbnailUrl && (
+              <>
+                <img src={clip.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30 blur-md scale-110" />
+                <img src={clip.thumbnailUrl} alt={clip.title} className="relative z-10 h-full w-auto max-w-full object-contain shadow-2xl" />
+              </>
+            )}
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/55 gap-6">
+              <div className="w-20 h-20 rounded-2xl bg-red-600/10 border-2 border-red-500/40 flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.3)]">
+                <svg viewBox="0 0 90 63" className="w-11 h-11 fill-red-600">
+                  <path d="M88.1 9.9C87 5.7 83.8 2.5 79.7 1.4 72.7 0 45 0 45 0S17.3 0 10.3 1.4C6.2 2.5 3 5.7 1.9 9.9 0 16.4 0 31.5 0 31.5s0 15.1 1.9 21.6c1.1 4.2 4.3 7.4 8.4 8.5C17.3 63 45 63 45 63s27.7 0 34.7-1.4c4.1-1.1 7.3-4.3 8.4-8.5C90 46.6 90 31.5 90 31.5s0-15.1-1.9-21.6z"/>
+                  <path d="M36 45l23.3-13.5L36 18z" fill="white"/>
+                </svg>
+              </div>
+              <div className="text-center px-4">
+                <p className="text-white/70 text-sm mb-1">كليبات YouTube تُشاهد مباشرةً على المنصة</p>
+                <p className="text-white/40 text-xs">اضغط الزر لفتح الكليب في YouTube</p>
+              </div>
+              <a href={directUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                className="group flex items-center gap-3 bg-red-600 hover:bg-red-700 active:scale-95 text-white font-bold px-8 py-4 rounded-2xl text-base transition-all shadow-[0_0_30px_rgba(239,68,68,0.5)] hover:shadow-[0_0_50px_rgba(239,68,68,0.7)]">
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-white"><path d="M8 5v14l11-7z"/></svg>
+                شاهد الكليب على YouTube
+                <ExternalLink className="w-4 h-4 opacity-70 group-hover:opacity-100" />
+              </a>
+            </div>
+          </div>
+          <div className="bg-gradient-to-t from-black to-black/80 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-white leading-tight mb-1 line-clamp-2">{clip.title}</h2>
+                <div className="flex items-center gap-3 text-sm text-white/60 flex-wrap">
+                  <span>بواسطة <span className="text-white/80 font-medium">{clip.submitterName || clip.submitter?.username || "زائر"}</span></span>
+                  {clip.tag && (<><span className="w-1 h-1 rounded-full bg-white/30" /><span className="text-red-400 font-medium">{TAG_LABELS[clip.tag] ?? clip.tag}</span></>)}
+                  <span className="w-1 h-1 rounded-full bg-white/30" />
+                  <span className="bg-red-600/10 text-red-400 text-xs font-bold px-2 py-0.5 rounded-md border border-red-500/30 uppercase tracking-wider">YouTube Clip</span>
+                </div>
+              </div>
+              <a href={directUrl} target="_blank" rel="noopener noreferrer"
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-red-400 transition-colors mt-1">
+                <ExternalLink className="w-3.5 h-3.5" /> فتح ↗
+              </a>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
 
+// ─────────────────────────────────────────────────────────────
+//  المشغّل الرئيسي — YouTube + Kick + YouTube Clips
+// ─────────────────────────────────────────────────────────────
+function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
+  const isKick   = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
+  const isYTClip = /youtube\.com\/clip\//i.test(clip.url || "");
+
+  if (isKick)   return <KickGhostPlayer   clip={clip} onClose={onClose} />;
+  if (isYTClip) return <YouTubeClipPlayer clip={clip} onClose={onClose} />;
+
+  // ── YouTube فيديو عادي ──────────────────────────────────
+  const embedUrl  = resolveYouTubeEmbedUrl(clip);
+  const videoId   = clip.videoId || extractFromUrl(clip.url).videoId;
+  const startTime = clip.startTime ?? 0;
+  const endTime   = clip.endTime   ?? 0;
+  const TAG_LABELS: Record<string, string> = {
+    Funny: "😂 مضحك", Epic: "⚡ ملحمي",
+    Glitch: "🐛 باج", Skill: "🎯 مهارة", Horror: "👻 مرعب",
+  };
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md"
+      onClick={onClose}>
+      <motion.div initial={{ scale: 0.85, opacity: 0, y: 30 }} animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.85, opacity: 0, y: 30 }} transition={{ type: "spring", damping: 22, stiffness: 260 }}
+        className="relative w-full max-w-4xl mx-4" onClick={(e) => e.stopPropagation()}>
+        <button onClick={onClose} className="absolute -top-12 right-0 text-white/60 hover:text-white flex items-center gap-2 transition-colors">
+          <X className="w-5 h-5" /> إغلاق
+        </button>
         <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_60px_rgba(168,85,247,0.2)] bg-black">
           <div className="aspect-video w-full">
             {embedUrl ? (
-              <iframe
-                key={clip.id}
-                src={embedUrl}
-                className="w-full h-full border-0"
+              <iframe key={clip.id} src={embedUrl} className="w-full h-full border-0"
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                allowFullScreen
-                title={clip.title}
-              />
+                allowFullScreen title={clip.title} />
             ) : (
               <FallbackPlayer clip={clip} />
             )}
           </div>
-
           <div className="bg-gradient-to-t from-black/90 to-black/60 p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-bold text-white leading-tight mb-1 line-clamp-1">
-                  {clip.title}
-                </h2>
+                <h2 className="text-lg font-bold text-white leading-tight mb-1 line-clamp-1">{clip.title}</h2>
                 <div className="flex items-center gap-3 text-sm text-white/60">
                   <span>بواسطة <span className="text-white/80 font-medium">{clip.submitterName || clip.submitter?.username || "زائر"}</span></span>
-                  {clip.tag && (
-                    <>
-                      <span className="w-1 h-1 rounded-full bg-white/30" />
-                      <span className="text-primary font-medium">{TAG_LABELS[clip.tag] ?? clip.tag}</span>
-                    </>
-                  )}
-                  {startTime > 0 && (
-                    <>
-                      <span className="w-1 h-1 rounded-full bg-white/30" />
-                      <span className="font-mono text-xs bg-white/10 px-2 py-0.5 rounded">
-                        {Math.floor(startTime/60)}:{String(startTime%60).padStart(2,"0")}
-                        {endTime > 0 && ` → ${Math.floor(endTime/60)}:${String(endTime%60).padStart(2,"0")}`}
-                      </span>
-                    </>
-                  )}
+                  {clip.tag && (<><span className="w-1 h-1 rounded-full bg-white/30" /><span className="text-primary font-medium">{TAG_LABELS[clip.tag] ?? clip.tag}</span></>)}
+                  {startTime > 0 && (<><span className="w-1 h-1 rounded-full bg-white/30" /><span className="font-mono text-xs bg-white/10 px-2 py-0.5 rounded">{Math.floor(startTime/60)}:{String(startTime%60).padStart(2,"0")}{endTime > 0 && ` → ${Math.floor(endTime/60)}:${String(endTime%60).padStart(2,"0")}`}</span></>)}
                 </div>
               </div>
-              {(videoId || clip.url) && (
-                <a
-                  href={/youtube\.com\/clip\//i.test(clip.url || "") ? clip.url : `https://www.youtube.com/watch?v=${videoId}&t=${startTime}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
-                >
+              {videoId && (
+                <a href={`https://www.youtube.com/watch?v=${videoId}&t=${startTime}`} target="_blank" rel="noopener noreferrer"
+                  className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors">
                   <ExternalLink className="w-3.5 h-3.5" /> YouTube
                 </a>
               )}
@@ -341,7 +369,6 @@ function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
     </motion.div>
   );
 }
-
 // Fallback: يستدعي السيرفر لتحويل الرابط — يدعم YouTube Clips الجديدة
 function FallbackPlayer({ clip }: { clip: any }) {
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);

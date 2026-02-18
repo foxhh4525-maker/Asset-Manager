@@ -26,29 +26,41 @@ function buildEmbedUrl(videoId: string, startTime = 0, endTime = 0): string {
 
 /**
  * ✅ الدالة الرئيسية لبناء embed URL لأي كليب YouTube
- * تتعامل مع 3 حالات:
- * 1. convertedUrl هو بالفعل embed URL كامل (لـ youtube.com/clip/)
+ * تتعامل مع 4 حالات:
+ * 1. convertedUrl هو بالفعل embed URL كامل (لكليبات youtube.com/clip/)
  * 2. videoId موجود → بناء embed عادي
  * 3. URL قديم → استخراج videoId منه
+ * 4. رابط كليب → إرسال للـ FallbackPlayer
  */
 function resolveYouTubeEmbedUrl(clip: any): string | null {
-  // الحالة 1: convertedUrl هو embed URL كامل (لكليبات youtube.com/clip/)
-  // يُعرف بأنه يبدأ بـ https://www.youtube.com/embed/ ويحتوي على clip= أو clipt=
   const url = clip.url || "";
-  if (/youtube\.com\/embed\//i.test(url)) {
-    // ✅ استخدمه مباشرةً مع autoplay
+
+  // الحالة 1: convertedUrl هو embed URL كامل (لكليبات youtube.com/clip/)
+  if (/youtube(-nocookie)?\.com\/embed\//i.test(url)) {
     try {
       const u = new URL(url);
       u.searchParams.set("autoplay", "1");
       u.searchParams.set("rel", "0");
-      // استبدل youtube.com بـ youtube-nocookie.com للخصوصية
       return u.toString().replace("www.youtube.com/embed", "www.youtube-nocookie.com/embed");
     } catch {
       return url;
     }
   }
 
-  // الحالة 2: videoId محفوظ في DB
+  // الحالة 2: رابط كليب يوتيوب (youtube.com/clip/XXX) → لا embed مباشر
+  if (/youtube\.com\/clip\//i.test(url)) {
+    // إذا عندنا videoId، نبني embed مع clip param
+    if (clip.videoId) {
+      const clipId = url.match(/\/clip\/([A-Za-z0-9_-]+)/)?.[1];
+      if (clipId) {
+        return `https://www.youtube-nocookie.com/embed/${clip.videoId}?clip=${clipId}&autoplay=1&rel=0`;
+      }
+    }
+    // نحتاج FallbackPlayer
+    return null;
+  }
+
+  // الحالة 3: videoId محفوظ في DB
   const videoId   = clip.videoId   || extractFromUrl(url).videoId;
   const startTime = clip.startTime ?? extractFromUrl(url).startTime;
   const endTime   = clip.endTime   ?? extractFromUrl(url).endTime;
@@ -80,26 +92,34 @@ function extractFromUrl(url: string): { videoId: string | null; startTime: numbe
 // ─────────────────────────────────────────────────────────────
 //  مشغّل Kick
 // ─────────────────────────────────────────────────────────────
-function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
-  const clipId   = clip.videoId || "";
-  const embedUrl = clipId ? `https://player.kick.com/clips/${clipId}` : null;
+function extractKickClipId(clip: any): string {
+  let clipId = clip.videoId || "";
+  if (!clipId && clip.url) {
+    const patterns = [
+      /kick\.com\/clip\/([A-Za-z0-9_-]+)/i,
+      /kick\.com\/[^/]+\/clips?\/([A-Za-z0-9_-]+)/i,
+      /kick\.com\/clips\/([A-Za-z0-9_-]+)/i,
+    ];
+    for (const p of patterns) {
+      const m = clip.url.match(p);
+      if (m?.[1]) { clipId = m[1]; break; }
+    }
+  }
+  return clipId;
+}
 
-  // نبدأ بمحاولة الـ iframe ونراقب إن كان يعمل
-  const [iframeStatus, setIframeStatus] = useState<"loading" | "ok" | "failed">(
-    embedUrl ? "loading" : "failed"
-  );
+// ─── Kick لا يسمح بالـ embed إلا بعد تسجيل الـ domain ───────
+// الحل: عرض thumbnail + زر مشاهدة مباشر على Kick بتصميم احترافي
+function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
+  const clipId    = extractKickClipId(clip);
+  const directUrl = clip.url?.startsWith("http")
+    ? clip.url
+    : (clipId ? `https://kick.com/clips/${clipId}` : "https://kick.com");
 
   const TAG_LABELS: Record<string, string> = {
     Funny: "😂 مضحك", Epic: "⚡ ملحمي",
     Glitch: "🐛 باج",  Skill: "🎯 مهارة", Horror: "👻 مرعب",
   };
-
-  // timeout: إذا لم يُحمَّل خلال 6 ثواني → fallback
-  useEffect(() => {
-    if (iframeStatus !== "loading") return;
-    const timer = setTimeout(() => setIframeStatus("failed"), 6000);
-    return () => clearTimeout(timer);
-  }, [iframeStatus]);
 
   return (
     <motion.div
@@ -124,68 +144,71 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
           <X className="w-5 h-5" /> إغلاق
         </button>
 
-        <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_60px_rgba(83,252,31,0.15)] bg-black">
-          <div className="aspect-video w-full relative">
-
-            {/* iframe الـ Kick */}
-            {embedUrl && iframeStatus !== "failed" && (
-              <iframe
-                key={clip.id}
-                src={embedUrl}
-                className={`absolute inset-0 w-full h-full border-0 ${iframeStatus === "loading" ? "opacity-0" : "opacity-100"}`}
-                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                allowFullScreen
-                title={clip.title}
-                onLoad={() => setIframeStatus("ok")}
-                onError={() => setIframeStatus("failed")}
-              />
+        <div className="relative rounded-2xl overflow-hidden border border-[#53FC1F]/20 shadow-[0_0_60px_rgba(83,252,31,0.2)] bg-black">
+          {/* منطقة الفيديو — thumbnail احترافي مع زر تشغيل */}
+          <div className="aspect-video w-full relative bg-[#0a0a0a] flex items-center justify-center">
+            {/* Thumbnail خلفية ضبابية */}
+            {clip.thumbnailUrl && (
+              <>
+                <img
+                  src={clip.thumbnailUrl}
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover opacity-30 blur-sm scale-105"
+                />
+                {/* Thumbnail واضح في المنتصف */}
+                <img
+                  src={clip.thumbnailUrl}
+                  alt={clip.title}
+                  className="relative z-10 h-full w-auto max-w-full object-contain shadow-2xl"
+                />
+              </>
             )}
 
-            {/* Spinner أثناء التحميل */}
-            {iframeStatus === "loading" && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black">
-                <Loader2 className="w-10 h-10 animate-spin text-[#53FC1F]" />
-              </div>
-            )}
-
-            {/* Fallback إذا فشل الـ iframe */}
-            {iframeStatus === "failed" && (
-              <div className="flex flex-col items-center justify-center h-full gap-5 bg-black min-h-[200px]">
-                {clip.thumbnailUrl && (
-                  <img
-                    src={clip.thumbnailUrl}
-                    alt={clip.title}
-                    className="absolute inset-0 w-full h-full object-cover opacity-20"
-                  />
-                )}
-                <div className="relative z-10 flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-[#53FC1F]/10 border border-[#53FC1F]/30 flex items-center justify-center">
-                    <svg viewBox="0 0 32 32" className="w-9 h-9" fill="#53FC1F">
-                      <path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z"/>
-                    </svg>
-                  </div>
-                  <p className="text-white/60 text-sm">لا يمكن تشغيل الكليب مدمجاً</p>
-                  <a
-                    href={clip.url?.startsWith("http") ? clip.url : `https://kick.com/clip/${clipId}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 bg-[#53FC1F] hover:bg-[#45e018] text-black font-bold px-6 py-3 rounded-xl text-sm transition-colors shadow-[0_0_20px_rgba(83,252,31,0.4)]"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    شاهد على Kick ↗
-                  </a>
+            {/* طبقة تدرج + زر التشغيل */}
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/50">
+              {/* شعار Kick */}
+              <div className="mb-6">
+                <div className="w-20 h-20 rounded-2xl bg-[#53FC1F]/10 border-2 border-[#53FC1F]/40 flex items-center justify-center shadow-[0_0_30px_rgba(83,252,31,0.3)]">
+                  <svg viewBox="0 0 32 32" className="w-11 h-11" fill="#53FC1F">
+                    <path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z"/>
+                  </svg>
                 </div>
               </div>
-            )}
+
+              {/* رسالة شرح */}
+              <p className="text-white/70 text-sm mb-2 text-center px-4">
+                كليبات Kick تُشاهد مباشرةً على المنصة
+              </p>
+              <p className="text-white/40 text-xs mb-6 text-center px-4">
+                اضغط الزر لفتح الكليب في Kick
+              </p>
+
+              {/* زر المشاهدة الرئيسي */}
+              <a
+                href={directUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                className="group flex items-center gap-3 bg-[#53FC1F] hover:bg-[#45e018] active:scale-95 text-black font-bold px-8 py-4 rounded-2xl text-base transition-all shadow-[0_0_30px_rgba(83,252,31,0.5)] hover:shadow-[0_0_50px_rgba(83,252,31,0.7)]"
+              >
+                {/* أيقونة تشغيل */}
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-black" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+                شاهد الكليب على Kick
+                <ExternalLink className="w-4 h-4 opacity-60 group-hover:opacity-100" />
+              </a>
+            </div>
           </div>
 
-          <div className="bg-gradient-to-t from-black/90 to-black/60 p-5">
+          {/* معلومات الكليب */}
+          <div className="bg-gradient-to-t from-black to-black/80 p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-bold text-white leading-tight mb-1 line-clamp-1">
+                <h2 className="text-lg font-bold text-white leading-tight mb-1 line-clamp-2">
                   {clip.title}
                 </h2>
-                <div className="flex items-center gap-3 text-sm text-white/60">
+                <div className="flex items-center gap-3 text-sm text-white/60 flex-wrap">
                   <span>بواسطة <span className="text-white/80 font-medium">{clip.submitterName || clip.submitter?.username || "زائر"}</span></span>
                   {clip.tag && (
                     <>
@@ -194,16 +217,18 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
                     </>
                   )}
                   <span className="w-1 h-1 rounded-full bg-white/30" />
-                  <span className="text-[#53FC1F]/70 text-xs font-semibold uppercase tracking-wide">Kick</span>
+                  <span className="bg-[#53FC1F]/10 text-[#53FC1F] text-xs font-bold px-2 py-0.5 rounded-md border border-[#53FC1F]/30 uppercase tracking-wider">
+                    Kick
+                  </span>
                 </div>
               </div>
               <a
-                href={clip.url?.startsWith("http") ? clip.url : `https://kick.com/clip/${clipId}`}
+                href={directUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-[#53FC1F]/70 transition-colors"
+                className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-[#53FC1F]/80 transition-colors mt-1"
               >
-                <ExternalLink className="w-3.5 h-3.5" /> Kick
+                <ExternalLink className="w-3.5 h-3.5" /> فتح ↗
               </a>
             </div>
           </div>
@@ -299,9 +324,9 @@ function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
                   )}
                 </div>
               </div>
-              {videoId && (
+              {(videoId || clip.url) && (
                 <a
-                  href={`https://www.youtube.com/watch?v=${videoId}&t=${startTime}`}
+                  href={/youtube\.com\/clip\//i.test(clip.url || "") ? clip.url : `https://www.youtube.com/watch?v=${videoId}&t=${startTime}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
@@ -317,44 +342,79 @@ function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
   );
 }
 
-// Fallback: يستدعي السيرفر لتحويل الرابط
+// Fallback: يستدعي السيرفر لتحويل الرابط — يدعم YouTube Clips الجديدة
 function FallbackPlayer({ clip }: { clip: any }) {
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [failed,   setFailed]   = useState(false);
+  const [loading,  setLoading]  = useState(true);
 
   useEffect(() => {
+    setLoading(true);
+    setFailed(false);
+    setEmbedUrl(null);
+
     fetch(`/api/resolve-url?url=${encodeURIComponent(clip.url)}`)
       .then(r => r.json())
       .then(d => {
-        // ✅ السيرفر قد يُعيد embedUrl كامل (للكليبات)
+        setLoading(false);
         if (d.embedUrl) {
+          // ✅ السيرفر أرجع embed URL جاهز (لكليبات youtube.com/clip/)
           setEmbedUrl(d.embedUrl);
         } else if (d.videoId) {
+          // فيديو عادي مع videoId
           setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
         } else {
           setFailed(true);
         }
       })
-      .catch(() => setFailed(true));
+      .catch(() => { setLoading(false); setFailed(true); });
   }, [clip.url]);
 
-  if (failed) return (
-    <div className="flex flex-col items-center justify-center h-full gap-4 bg-black text-white">
-      <p className="text-sm text-white/60">لا يمكن تشغيل هذا الكليب مباشرةً</p>
-      <a href={clip.url} target="_blank" rel="noopener noreferrer"
-        className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors">
-        شاهد على YouTube ↗
-      </a>
-    </div>
-  );
-  if (!embedUrl) return (
+  const isYouTubeClip = /youtube\.com\/clip\//i.test(clip.url || "");
+
+  if (loading) return (
     <div className="flex items-center justify-center h-full bg-black">
-      <Loader2 className="w-10 h-10 animate-spin text-primary" />
+      <div className="flex flex-col items-center gap-3">
+        <Loader2 className="w-10 h-10 animate-spin text-red-500" />
+        <p className="text-white/50 text-sm">جاري تحميل الكليب...</p>
+      </div>
     </div>
   );
+
+  if (failed) return (
+    <div className="flex flex-col items-center justify-center h-full gap-5 bg-black text-white p-6">
+      {/* YouTube thumbnail */}
+      {clip.thumbnailUrl && (
+        <img src={clip.thumbnailUrl} alt={clip.title}
+          className="w-full max-w-xs rounded-xl opacity-60 shadow-2xl" />
+      )}
+      {/* شعار YouTube */}
+      <div className="flex flex-col items-center gap-3 text-center">
+        <svg viewBox="0 0 90 20" className="h-8 fill-red-600">
+          <path d="M27.9727 3.12324C27.6435 1.89323 26.6768 0.926623 25.4468 0.597366C23.2197 0 14.285 0 14.285 0C14.285 0 5.35042 0 3.12323 0.597366C1.89323 0.926623 0.926623 1.89323 0.597366 3.12324C0 5.35042 0 10 0 10C0 10 0 14.6496 0.597366 16.8768C0.926623 18.1068 1.89323 19.0734 3.12323 19.4026C5.35042 20 14.285 20 14.285 20C14.285 20 23.2197 20 25.4468 19.4026C26.6768 19.0734 27.6435 18.1068 27.9727 16.8768C28.5701 14.6496 28.5701 10 28.5701 10C28.5701 10 28.5677 5.35042 27.9727 3.12324Z"/>
+          <path d="M11.4253 14.2854L18.8477 10.0004L11.4253 5.71533V14.2854Z" fill="white"/>
+        </svg>
+        <p className="text-white/60 text-sm max-w-xs">
+          {isYouTubeClip
+            ? "كليبات YouTube الجديدة تحتاج فتحها مباشرةً على YouTube"
+            : "لا يمكن تشغيل هذا الفيديو مباشرةً"}
+        </p>
+        <a href={clip.url} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)]">
+          <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M8 5v14l11-7z"/></svg>
+          {isYouTubeClip ? "شاهد الكليب على YouTube" : "افتح على YouTube"}
+          <ExternalLink className="w-4 h-4" />
+        </a>
+      </div>
+    </div>
+  );
+
+  if (!embedUrl) return null;
+
   return (
     <iframe src={embedUrl} className="w-full h-full border-0"
-      allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen title={clip.title} />
+      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+      allowFullScreen title={clip.title} />
   );
 }
 

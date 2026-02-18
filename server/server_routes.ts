@@ -279,11 +279,18 @@ export async function registerRoutes(
       const meta = isKickUrl(url)
         ? await fetchKickMetadata(url)
         : await fetchYouTubeMetadata(url);
+
+      // ─── إذا الـ convertedUrl هو embed URL، أرجعه مباشرة ──
+      const isEmbedUrl = /youtube(-nocookie)?\.com\/embed\//i.test(meta.convertedUrl || "");
+
       res.json({
-        platform:  meta.platform  || "youtube",
-        videoId:   meta.videoId   || null,
-        startTime: meta.startTime || 0,
-        endTime:   meta.endTime   || 0,
+        platform:   meta.platform  || "youtube",
+        videoId:    meta.videoId   || null,
+        startTime:  meta.startTime || 0,
+        endTime:    meta.endTime   || 0,
+        embedUrl:   isEmbedUrl ? meta.convertedUrl : null,
+        title:      meta.title     || null,
+        thumbnailUrl: meta.thumbnailUrl || null,
       });
     } catch {
       res.status(400).json({ message: "Could not resolve URL" });
@@ -486,29 +493,73 @@ function extractVideoId(url: string): string | null {
 }
 
 async function fetchYouTubeMetadata(clipUrl: string) {
-  const isClip = /youtube\.com\/clip\//.test(clipUrl);
+  const isYouTubeClip = /youtube\.com\/clip\//.test(clipUrl);
 
-  if (isClip) {
+  if (isYouTubeClip) {
+    // ─── استخراج clip ID ────────────────────────────────────
+    const clipId = clipUrl.match(/\/clip\/([A-Za-z0-9_-]+)/)?.[1] ?? "";
+    console.log("[YT Clip] clipId:", clipId, "url:", clipUrl);
+
     try {
+      // ─── oEmbed يُعيد HTML embed كامل مع كل المعاملات ────
       const resp = await fetch(
         `https://www.youtube.com/oembed?url=${encodeURIComponent(clipUrl)}&format=json`,
-        { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) }
+        {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/json",
+          },
+          signal: AbortSignal.timeout(10000),
+        }
       );
+      console.log("[YT Clip] oEmbed status:", resp.status);
+
       if (resp.ok) {
         const data = await resp.json() as any;
-        const videoId = (data?.thumbnail_url as string)?.match(/\/vi\/([\w-]{11})\//)?.[1] ?? null;
+        console.log("[YT Clip] oEmbed data:", JSON.stringify(data).slice(0, 300));
+
         const html: string = data?.html ?? "";
-        const startTime = parseInt(html.match(/[?&]start=(\d+)/)?.[1] ?? "0") || 0;
-        const endTime   = parseInt(html.match(/[?&]end=(\d+)/)?.[1]   ?? "0") || 0;
+        const videoId = (data?.thumbnail_url as string)?.match(/\/vi\/([\w-]{11})\//)?.[1] ?? null;
+
+        // ─── استخراج src الكامل من HTML embed ──────────────
+        const srcMatch = html.match(/src="([^"]+)"/);
+        const embedSrc = srcMatch?.[1] ?? "";
+        console.log("[YT Clip] embed src:", embedSrc);
+
+        // ─── استخراج clip + clipt params من src ──────────
+        let embedUrl: string;
+        if (embedSrc.includes("clip=") || embedSrc.includes("clipt=")) {
+          // نستخدم الـ src مباشرة مع إضافة autoplay
+          try {
+            const u = new URL(embedSrc);
+            u.searchParams.set("autoplay", "1");
+            u.searchParams.set("rel", "0");
+            // تحويل إلى youtube-nocookie للخصوصية
+            embedUrl = u.toString().replace("www.youtube.com/embed", "www.youtube-nocookie.com/embed");
+          } catch {
+            embedUrl = embedSrc;
+          }
+        } else if (videoId && clipId) {
+          // fallback: بناء embed URL مع clip parameter
+          embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?clip=${clipId}&autoplay=1&rel=0`;
+        } else {
+          embedUrl = embedSrc || clipUrl;
+        }
+
+        const startTime = parseInt(new URL(embedSrc || "https://x.com").searchParams.get("start") ?? "0") || 0;
+        const endTime   = parseInt(new URL(embedSrc || "https://x.com").searchParams.get("end") ?? "0") || 0;
         const clipDuration = startTime && endTime && endTime > startTime ? endTime - startTime : 30;
+
+        console.log("[YT Clip] Final embedUrl:", embedUrl);
+
         return {
-          convertedUrl: videoId ? `https://www.youtube.com/watch?v=${videoId}&start=${startTime}&end=${endTime}` : clipUrl,
+          convertedUrl: embedUrl, // ✅ نحفظ embed URL مباشرة
           platform:     "youtube" as const,
           title:        (data.title as string) || "Gaming Clip",
           thumbnailUrl: (data.thumbnail_url as string) || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ""),
           channelName:  (data.author_name as string) || "Unknown Channel",
           duration:     formatDuration(clipDuration),
-          videoId:      videoId ?? "",
+          videoId:      videoId ?? clipId,
           startTime,
           endTime,
         };
@@ -516,12 +567,51 @@ async function fetchYouTubeMetadata(clipUrl: string) {
     } catch (err) {
       console.warn("[fetchYouTubeMetadata] oEmbed failed:", err);
     }
+
+    // ─── Fallback: حفظ الرابط الأصلي للكليب ──────────────
+    // السيرفر سيحاول مرة أخرى عند العرض
+    return {
+      convertedUrl: clipUrl,
+      platform:     "youtube" as const,
+      title:        "Gaming Clip",
+      thumbnailUrl: "",
+      channelName:  "YouTube Clip",
+      duration:     "0:30",
+      videoId:      clipId,
+      startTime:    0,
+      endTime:      0,
+    };
   }
 
+  // ─── فيديو YouTube عادي (watch?v=...) ────────────────────
   const videoId = extractVideoId(clipUrl) ?? "";
   const urlObj  = (() => { try { return new URL(clipUrl); } catch { return null; } })();
   const startTime = parseInt(urlObj?.searchParams.get("start") ?? "0") || 0;
   const endTime   = parseInt(urlObj?.searchParams.get("end")   ?? "0") || 0;
+
+  if (videoId) {
+    // جرب oEmbed للعنوان والـ thumbnail
+    try {
+      const resp = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(clipUrl)}&format=json`,
+        { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(6000) }
+      );
+      if (resp.ok) {
+        const data = await resp.json() as any;
+        return {
+          convertedUrl: clipUrl,
+          platform:     "youtube" as const,
+          title:        (data.title as string) || "Gaming Clip",
+          thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+          channelName:  (data.author_name as string) || "YouTube",
+          duration:     formatDuration(endTime - startTime || 30),
+          videoId,
+          startTime,
+          endTime,
+        };
+      }
+    } catch {}
+  }
 
   return {
     convertedUrl: clipUrl,

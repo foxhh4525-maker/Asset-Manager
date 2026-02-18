@@ -40,6 +40,21 @@ async function ensureSystemUsers() {
           created_at    timestamp NOT NULL DEFAULT now()
         );
       `);
+      await c.query(`
+        CREATE TABLE IF NOT EXISTS artwork_ratings (
+          id            serial PRIMARY KEY,
+          artwork_id    integer NOT NULL REFERENCES artworks(id) ON DELETE CASCADE,
+          voter_key     text NOT NULL,
+          overall       integer NOT NULL CHECK (overall BETWEEN 1 AND 5),
+          quality       integer CHECK (quality BETWEEN 1 AND 5),
+          speed         integer CHECK (speed BETWEEN 1 AND 5),
+          communication integer CHECK (communication BETWEEN 1 AND 5),
+          value         integer CHECK (value BETWEEN 1 AND 5),
+          comment       text,
+          created_at    timestamp NOT NULL DEFAULT now(),
+          UNIQUE(artwork_id, voter_key)
+        );
+      `);
       c.release();
     } catch (e: any) {
       console.warn("[migration] submitter_name column:", e?.message);
@@ -361,6 +376,48 @@ export async function registerRoutes(
     const c = await pool.connect();
     try {
       await c.query(`DELETE FROM artworks WHERE id = $1`, [id]);
+      res.json({ success: true });
+    } finally { c.release(); }
+  });
+
+
+  // GET /api/artworks/:id/ratings
+  app.get("/api/artworks/:id/ratings", async (req, res) => {
+    const id = parseInt(req.params.id);
+    if (!pool) return res.json({ avg: 0, count: 0, breakdown: [0,0,0,0,0] });
+    const c = await pool.connect();
+    try {
+      const r = await c.query(
+        `SELECT ROUND(AVG(overall)::numeric,1) AS avg, COUNT(*) AS count,
+           SUM(CASE WHEN overall=5 THEN 1 ELSE 0 END) AS s5,
+           SUM(CASE WHEN overall=4 THEN 1 ELSE 0 END) AS s4,
+           SUM(CASE WHEN overall=3 THEN 1 ELSE 0 END) AS s3,
+           SUM(CASE WHEN overall=2 THEN 1 ELSE 0 END) AS s2,
+           SUM(CASE WHEN overall=1 THEN 1 ELSE 0 END) AS s1
+         FROM artwork_ratings WHERE artwork_id = $1`, [id]);
+      const row = r.rows[0];
+      res.json({ avg: parseFloat(row.avg)||0, count: parseInt(row.count)||0,
+        breakdown: [parseInt(row.s1)||0,parseInt(row.s2)||0,parseInt(row.s3)||0,parseInt(row.s4)||0,parseInt(row.s5)||0] });
+    } finally { c.release(); }
+  });
+
+  // POST /api/artworks/:id/ratings
+  app.post("/api/artworks/:id/ratings", async (req, res) => {
+    const id = parseInt(req.params.id);
+    const { overall, quality, speed, communication, value, comment } = req.body;
+    if (!overall || overall < 1 || overall > 5) return res.status(400).json({ message: "تقييم غير صالح" });
+    if (!pool) return res.status(500).json({ message: "No DB" });
+    const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0] || req.socket.remoteAddress || "anon";
+    const userId = req.isAuthenticated() ? (req.user as any).id : null;
+    const voterKey = userId ? `u:${userId}` : `ip:${ip}`;
+    const c = await pool.connect();
+    try {
+      await c.query(
+        `INSERT INTO artwork_ratings (artwork_id, voter_key, overall, quality, speed, communication, value, comment)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         ON CONFLICT (artwork_id, voter_key) DO UPDATE
+         SET overall=$3, quality=$4, speed=$5, communication=$6, value=$7, comment=$8, created_at=now()`,
+        [id, voterKey, overall, quality||null, speed||null, communication||null, value||null, (comment||"").slice(0,500)||null]);
       res.json({ success: true });
     } finally { c.release(); }
   });

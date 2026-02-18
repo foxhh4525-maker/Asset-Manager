@@ -20,6 +20,16 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 let GUEST_USER_ID: number | null = null;
 
 async function ensureSystemUsers() {
+  // ── تأكد من وجود عمود submitter_name في جدول clips ──────
+  if (pool) {
+    try {
+      const c = await pool.connect();
+      await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS submitter_name text;`);
+      c.release();
+    } catch (e: any) {
+      console.warn("[migration] submitter_name column:", e?.message);
+    }
+  }
   let guest = await storage.getUserByDiscordId("system-guest").catch(() => null);
   if (!guest) {
     guest = await storage.createUser({

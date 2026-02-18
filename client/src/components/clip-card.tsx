@@ -27,7 +27,7 @@ const TAG_COLORS: Record<string, string> = {
   Horror: "bg-red-500/20 text-red-300 border-red-500/30",
 };
 
-// ── توليد أفاتار من الاسم — بدون صور خارجية ─────────────────
+// ── توليد أفاتار من الاسم — fallback فقط ─────────────────
 const AVATAR_COLORS = [
   "#7c3aed","#2563eb","#059669","#d97706","#dc2626","#db2777","#0891b2",
 ];
@@ -46,6 +46,36 @@ interface ClipCardProps {
   isAdmin?: boolean;
 }
 
+// ── مكوّن الأفاتار — يعرض الصورة الحقيقية أو يرجع للحرف ──
+function SubmitterAvatar({ clip }: { clip: any }) {
+  const [imgFailed, setImgFailed] = useState(false);
+  const displayName = clip.submitterName || clip.submitter?.username || "زائر";
+  // ✅ أولوية: submitterAvatar → submitter.avatarUrl → حرف ملون
+  const avatarSrc   = clip.submitterAvatar || clip.submitter?.avatarUrl || null;
+  const avatarColor = nameColor(displayName);
+  const avatarLetter= nameInitial(displayName);
+
+  if (avatarSrc && !imgFailed) {
+    return (
+      <img
+        src={avatarSrc}
+        alt={displayName}
+        onError={() => setImgFailed(true)}
+        className="w-7 h-7 rounded-full flex-shrink-0 ring-2 ring-primary/30 object-cover bg-background"
+      />
+    );
+  }
+
+  return (
+    <div
+      className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ring-2 ring-white/10"
+      style={{ backgroundColor: avatarColor }}
+    >
+      {avatarLetter}
+    </div>
+  );
+}
+
 export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
   const voteMutation   = useVoteClip();
   const deleteMutation = useDeleteClip();
@@ -54,8 +84,6 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
   const displayName = clip.submitterName || clip.submitter?.username || "زائر";
   const tagLabel    = TAG_LABELS[clip.tag] ?? clip.tag;
   const tagColor    = TAG_COLORS[clip.tag] ?? "bg-primary/20 text-primary border-primary/30";
-  const avatarColor = nameColor(displayName);
-  const avatarLetter= nameInitial(displayName);
 
   return (
     <>
@@ -103,7 +131,7 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
             {clip.duration}
           </div>
 
-          {/* ✅ تصنيف الكليب فوق الصورة - يظهر دائماً */}
+          {/* تصنيف الكليب فوق الصورة */}
           {clip.tag && (
             <div className="absolute top-2 right-2">
               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border backdrop-blur-sm ${tagColor}`}>
@@ -119,14 +147,9 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
             {clip.title}
           </h3>
 
-          {/* ✅ المرسِل — أفاتار مبني من الاسم (لا يعتمد على صور خارجية) */}
+          {/* ✅ المرسِل — يعرض الأفاتار الحقيقي */}
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <div
-              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ring-2 ring-white/10"
-              style={{ backgroundColor: avatarColor }}
-            >
-              {avatarLetter}
-            </div>
+            <SubmitterAvatar clip={clip} />
             <span className="truncate font-medium text-foreground/80">{displayName}</span>
             <span className="text-muted-foreground/40 mx-0.5">•</span>
             <Clock className="w-3 h-3 flex-shrink-0" />
@@ -158,7 +181,6 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
               </Button>
             </div>
 
-            {/* ✅ تصنيف في أسفل البطاقة أيضاً */}
             {clip.tag && (
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tagColor}`}>
                 {tagLabel}

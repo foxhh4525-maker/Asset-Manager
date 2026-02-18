@@ -58,28 +58,31 @@ export default function SubmitPage() {
   const onSubmit = async (data: any) => {
     if (!metadata) return;
 
-    // الزائر يجب أن يكون له هوية
     if (!user && !identity) {
       setIdentityOpen(true);
       return;
     }
 
+    // ✅ إرسال الأفاتار مع الكليب
+    const submitterAvatar = user
+      ? (user.avatarUrl || null)
+      : (identity ? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed) : null);
+
     await createClip.mutateAsync({
-      url:           metadata.convertedUrl || data.url,
-      tag:           data.tag,
-      title:         metadata.title,
-      thumbnailUrl:  metadata.thumbnailUrl,
-      channelName:   metadata.channelName,
-      duration:      metadata.duration,
-      submitterName: user ? user.username : (identity?.name ?? "زائر"),
+      url:             metadata.convertedUrl || data.url,
+      tag:             data.tag,
+      title:           metadata.title,
+      thumbnailUrl:    metadata.thumbnailUrl,
+      channelName:     metadata.channelName,
+      duration:        metadata.duration,
+      submitterName:   user ? user.username : (identity?.name ?? "زائر"),
+      submitterAvatar, // ✅ الجديد
     } as any);
 
     setLocation("/");
   };
 
   const hasTimestamps = metadata && (metadata.startTime > 0 || metadata.endTime > 0);
-
-  // بطاقة هوية الزائر
   const visitorAvatar = identity ? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed) : null;
 
   return (
@@ -104,7 +107,6 @@ export default function SubmitPage() {
               animate={{ opacity: 1, scale: 1 }}
             >
               {identity ? (
-                /* هوية موجودة → عرض + زر تعديل */
                 <div
                   onClick={() => setIdentityOpen(true)}
                   className="flex items-center gap-4 p-4 rounded-xl border border-primary/30 bg-primary/5 cursor-pointer hover:border-primary/60 hover:bg-primary/10 transition-all group"
@@ -125,7 +127,6 @@ export default function SubmitPage() {
                   </Button>
                 </div>
               ) : (
-                /* لا توجد هوية → دعوة للإنشاء */
                 <button
                   onClick={() => setIdentityOpen(true)}
                   className="w-full flex flex-col items-center gap-3 p-6 rounded-xl border-2 border-dashed border-primary/30 hover:border-primary/60 hover:bg-primary/5 transition-all group"
@@ -151,7 +152,6 @@ export default function SubmitPage() {
             <CardContent className="p-8">
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-                {/* رابط YouTube أو Kick */}
                 <div className="space-y-2">
                   <Label htmlFor="url">رابط الكليب (YouTube أو Kick)</Label>
                   <div className="relative">
@@ -211,7 +211,6 @@ export default function SubmitPage() {
                   </motion.div>
                 )}
 
-                {/* التصنيف */}
                 <div className="space-y-2">
                   <Label>تصنيف الكليب</Label>
                   <Select value={form.watch("tag")} onValueChange={(v) => form.setValue("tag", v, { shouldValidate: true })}>
@@ -253,9 +252,7 @@ export default function SubmitPage() {
       <IdentityModal
         open={identityOpen}
         onClose={() => setIdentityOpen(false)}
-        onSave={() => {
-          // إذا كان هناك نموذج جاهز، أرسله مباشرة بعد حفظ الهوية
-        }}
+        onSave={() => {}}
       />
     </Layout>
   );

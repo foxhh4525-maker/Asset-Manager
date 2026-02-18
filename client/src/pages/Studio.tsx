@@ -140,7 +140,7 @@ export default function Studio() {
                       <h2 className="text-lg font-semibold">{currentClip.title}</h2>
                       <div className="flex items-center gap-2 mt-2">
                         <Badge variant="outline">{currentClip.tag}</Badge>
-                        <span className="text-sm text-muted-foreground">من: {currentClip.submitter?.username || "مجهول"}</span>
+                        <span className="text-sm text-muted-foreground">من: {currentClip.submitterName || currentClip.submitter?.username || "مجهول"}</span>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -178,7 +178,7 @@ export default function Studio() {
                       </div>
                       <div className="flex-1 min-w-0 text-right">
                         <p className="text-sm font-medium truncate">{clip.title}</p>
-                        <p className="text-xs text-muted-foreground">{clip.submitter?.username || "مجهول"}</p>
+                        <p className="text-xs text-muted-foreground">{clip.submitterName || clip.submitter?.username || "مجهول"}</p>
                       </div>
                     </motion.div>
                   ))}

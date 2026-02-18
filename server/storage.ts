@@ -60,6 +60,7 @@ export class DatabaseStorage implements IStorage {
       upvotes: clips.upvotes,
       downvotes: clips.downvotes,
       createdAt: clips.createdAt,
+      submitterName: clips.submitterName,
       submitter: {
         username: users.username,
         avatarUrl: users.avatarUrl,

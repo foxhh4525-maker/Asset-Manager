@@ -408,53 +408,66 @@ function extractKickClipId(url: string): string | null {
 }
 
 /**
- * يجلب البيانات الوصفية لكليب Kick من Kick API العام
- * ثم يبني نفس شكل كائن metadata الذي تعيده fetchYouTubeMetadata
+ * يجلب البيانات الوصفية لكليب Kick
+ * يجرب عدة APIs ويستخرج الـ clipId بشكل صحيح
  */
 async function fetchKickMetadata(clipUrl: string) {
   const clipId = extractKickClipId(clipUrl);
+  console.log("[Kick] clipUrl:", clipUrl, "→ clipId:", clipId);
 
   if (clipId) {
-    try {
-      const resp = await fetch(
-        `https://kick.com/api/v2/clips/${clipId}`,
-        {
+    // جرب عدة APIs بما فيها oEmbed
+    const apiEndpoints = [
+      `https://kick.com/api/v2/clips/${clipId}`,
+      `https://kick.com/api/v1/clips/${clipId}`,
+      `https://kick.com/api/v2/clips?clip_id=${clipId}`,
+    ];
+
+    for (const endpoint of apiEndpoints) {
+      try {
+        const resp = await fetch(endpoint, {
           headers: {
-            "User-Agent": "Mozilla/5.0",
-            "Accept":     "application/json",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept":     "application/json, text/plain, */*",
+            "Referer":    "https://kick.com/",
+            "Origin":     "https://kick.com",
           },
-          signal: AbortSignal.timeout(8000),
+          signal: AbortSignal.timeout(10000),
+        });
+        console.log("[Kick] API", endpoint, "status:", resp.status);
+        if (resp.ok) {
+          const data = await resp.json() as any;
+          // Kick API قد يُرجع البيانات مباشرة أو داخل .clip أو .data
+          const clip    = data?.clip ?? data?.data?.clip ?? data?.data ?? data;
+          const title   = clip?.title || clip?.clip_title || `Kick Clip`;
+          const thumb   = clip?.thumbnail_url || clip?.thumbnail || clip?.thumb || clip?.clip_thumbnail || "";
+          const channel = clip?.channel?.slug || clip?.channel?.username || clip?.streamer?.username || clip?.channel_name || "Kick";
+          const dur     = typeof clip?.duration === "number" ? clip.duration : (typeof clip?.duration_seconds === "number" ? clip.duration_seconds : 30);
+          console.log("[Kick] Got metadata:", { title, thumb, channel });
+          return {
+            convertedUrl: clipUrl,
+            platform:     "kick" as const,
+            title,
+            thumbnailUrl: thumb,
+            channelName:  channel,
+            duration:     formatDuration(dur),
+            videoId:      clipId,
+            startTime:    0,
+            endTime:      0,
+          };
         }
-      );
-      if (resp.ok) {
-        const data = await resp.json() as any;
-        const clip    = data?.clip ?? data;
-        const title   = clip?.title        || clip?.clip_title    || "Kick Clip";
-        const thumb   = clip?.thumbnail    || clip?.thumbnail_url || "";
-        const channel = clip?.channel?.slug || clip?.channel_name  || "Unknown";
-        const duration = clip?.duration    || 30;
-        return {
-          convertedUrl: clipUrl,
-          platform:     "kick" as const,
-          title,
-          thumbnailUrl: thumb,
-          channelName:  channel,
-          duration:     formatDuration(typeof duration === "number" ? duration : 30),
-          videoId:      clipId,    // نحفظ الـ slug هنا بدل videoId
-          startTime:    0,
-          endTime:      0,
-        };
+      } catch (err) {
+        console.warn("[fetchKickMetadata] API failed:", endpoint, err);
       }
-    } catch (err) {
-      console.warn("[fetchKickMetadata] API failed:", err);
     }
   }
 
-  // Fallback — البيانات من URL فقط بدون API
+  // Fallback — البيانات من URL فقط
+  console.warn("[Kick] Using fallback metadata for:", clipUrl);
   return {
     convertedUrl: clipUrl,
     platform:     "kick" as const,
-    title:        "Kick Clip",
+    title:        clipId ? `Kick Clip — ${clipId}` : "Kick Clip",
     thumbnailUrl: "",
     channelName:  "Kick",
     duration:     "0:30",

@@ -12,50 +12,73 @@ import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
-// ─── نفس المشغّل الذكي ────────────────────────────────────
-function parseClipUrl(url: string) {
-  if (!url) return { type: "unknown" as const, url };
-  if (url.startsWith("/api/videos/")) {
-    const match = url.match(/_(\d+)-(\d+)\.mp4$/);
-    return {
-      type: "local" as const, url,
-      startTime: match ? parseInt(match[1]) : 0,
-      endTime:   match ? parseInt(match[2]) : 0,
-    };
+// ─── مشغّل ذكي يدعم Kick + YouTube + Local ──────────────
+function extractKickClipId(url: string): string | null {
+  const patterns = [
+    /kick\.com\/clip\/([A-Za-z0-9_-]+)/i,
+    /kick\.com\/[^/]+\/clips?\/([A-Za-z0-9_-]+)/i,
+    /kick\.com\/clips\/([A-Za-z0-9_-]+)/i,
+  ];
+  for (const p of patterns) {
+    const m = url?.match(p);
+    if (m?.[1]) return m[1];
   }
-  if (/youtube\.com\/clip\//.test(url)) return { type: "clip" as const, url };
-  try {
-    const u = new URL(url);
-    const videoId   = u.searchParams.get("v");
-    const startTime = parseInt(u.searchParams.get("start") ?? "0") || 0;
-    const endTime   = parseInt(u.searchParams.get("end")   ?? "0") || 0;
-    if (videoId) return { type: "youtube" as const, url: `https://www.youtube.com/watch?v=${videoId}`, videoId, startTime, endTime };
-  } catch {}
-  return { type: "unknown" as const, url };
+  return null;
 }
 
-function SmartPlayer({ url, clipId }: { url: string; clipId: number }) {
-  const info = parseClipUrl(url);
+function SmartPlayer({ url, clipId, clip }: { url: string; clipId: number; clip?: any }) {
+  // ─── كليب Kick ─────────────────────────────────────────
+  const isKick = clip?.platform === "kick" || /kick\.com/i.test(url || "");
+  if (isKick) {
+    const kClipId   = clip?.videoId || extractKickClipId(url) || "";
+    const directUrl = url?.startsWith("http")
+      ? url
+      : (kClipId ? `https://kick.com/clips/${kClipId}` : "https://kick.com");
 
-  if (info.type === "local") {
-    const fragment = info.startTime || info.endTime
-      ? `#t=${info.startTime},${info.endTime}` : "";
     return (
-      <video
-        key={`${clipId}-local`}
-        src={`${info.url}${fragment}`}
-        controls
-        playsInline
-        className="w-full h-full object-contain bg-black"
-      />
+      <div className="relative w-full h-full bg-black flex flex-col items-center justify-center gap-4">
+        {clip?.thumbnailUrl && (
+          <img src={clip.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-sm" />
+        )}
+        <div className="relative z-10 flex flex-col items-center gap-5 p-6 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-[#53FC1F]/10 border-2 border-[#53FC1F]/40 flex items-center justify-center shadow-[0_0_30px_rgba(83,252,31,0.3)]">
+            <svg viewBox="0 0 32 32" className="w-9 h-9" fill="#53FC1F">
+              <path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-white font-bold text-base mb-1">{clip?.title || "Kick Clip"}</p>
+            <p className="text-white/50 text-sm">كليبات Kick تُفتح مباشرةً على المنصة</p>
+          </div>
+          <a href={directUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 bg-[#53FC1F] hover:bg-[#45e018] text-black font-bold px-6 py-3 rounded-xl text-sm transition-all shadow-[0_0_20px_rgba(83,252,31,0.5)]">
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-black"><path d="M8 5v14l11-7z"/></svg>
+            شاهد على Kick
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
     );
   }
 
-  if (info.type === "youtube") {
+  // ─── فيديو محلي ────────────────────────────────────────
+  if (url?.startsWith("/api/videos/")) {
+    const match    = url.match(/_(\d+)-(\d+)\.mp4$/);
+    const fragment = match ? `#t=${match[1]},${match[2]}` : "";
+    return (
+      <video key={`${clipId}-local`} src={`${url}${fragment}`}
+        controls playsInline className="w-full h-full object-contain bg-black" />
+    );
+  }
+
+  // ─── YouTube ────────────────────────────────────────────
+  const st = clip?.startTime || 0;
+  const en = clip?.endTime   || 0;
+  if (/youtube\.com|youtu\.be/i.test(url || "")) {
     return (
       <ReactPlayer
         key={`${clipId}-yt`}
-        url={info.url}
+        url={url}
         width="100%"
         height="100%"
         controls
@@ -63,8 +86,8 @@ function SmartPlayer({ url, clipId }: { url: string; clipId: number }) {
         config={{
           youtube: {
             playerVars: {
-              start:          info.startTime || 0,
-              ...(info.endTime > 0 ? { end: info.endTime } : {}),
+              start: st || 0,
+              ...(en > 0 ? { end: en } : {}),
               rel: 0, modestbranding: 1,
             },
           },
@@ -73,15 +96,13 @@ function SmartPlayer({ url, clipId }: { url: string; clipId: number }) {
     );
   }
 
+  // ─── Unknown ───────────────────────────────────────────
   return (
     <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-      <Loader2 className="w-7 h-7 animate-spin text-primary" />
-      <p className="text-sm text-center px-4">جاري تحميل الفيديو على السيرفر...</p>
-      <a
-        href={url} target="_blank" rel="noopener noreferrer"
-        className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm"
-      >
-        <ExternalLink className="w-4 h-4" /> افتح على YouTube
+      <p className="text-sm text-center px-4">لا يمكن تشغيل هذا الكليب مباشرةً</p>
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        className="flex items-center gap-2 bg-primary hover:bg-primary/90 text-white px-4 py-2 rounded-lg text-sm">
+        <ExternalLink className="w-4 h-4" /> افتح الكليب
       </a>
     </div>
   );
@@ -133,7 +154,7 @@ export default function Studio() {
               {currentClip ? (
                 <>
                   <div className="aspect-video rounded overflow-hidden bg-black">
-                    <SmartPlayer url={currentClip.url} clipId={currentClip.id} />
+                    <SmartPlayer url={currentClip.url} clipId={currentClip.id} clip={currentClip} />
                   </div>
                   <div className="mt-4 flex items-center justify-between">
                     <div>

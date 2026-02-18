@@ -1,14 +1,14 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Layout } from "@/components/layout";
 import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Flame, Clock, Trophy, Loader2, Play, X, Maximize2, ExternalLink } from "lucide-react";
+import { Flame, Clock, Trophy, Loader2, X, ExternalLink } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 // ─────────────────────────────────────────────────────────────
-//  بناء رابط الـ Embed من البيانات المحفوظة مسبقاً
+//  بناء رابط الـ Embed من بيانات videoId + timestamps
 // ─────────────────────────────────────────────────────────────
 function buildEmbedUrl(videoId: string, startTime = 0, endTime = 0): string {
   const p = new URLSearchParams({
@@ -17,22 +17,51 @@ function buildEmbedUrl(videoId: string, startTime = 0, endTime = 0): string {
     modestbranding: "1",
     start:          String(startTime),
     enablejsapi:    "0",
-    iv_load_policy: "3",  // إخفاء التعليقات التوضيحية
+    iv_load_policy: "3",
     color:          "white",
   });
   if (endTime > 0) p.set("end", String(endTime));
-  // youtube-nocookie = بدون كوكيز + أسرع تحميل
   return `https://www.youtube-nocookie.com/embed/${videoId}?${p}`;
+}
+
+/**
+ * ✅ الدالة الرئيسية لبناء embed URL لأي كليب YouTube
+ * تتعامل مع 3 حالات:
+ * 1. convertedUrl هو بالفعل embed URL كامل (لـ youtube.com/clip/)
+ * 2. videoId موجود → بناء embed عادي
+ * 3. URL قديم → استخراج videoId منه
+ */
+function resolveYouTubeEmbedUrl(clip: any): string | null {
+  // الحالة 1: convertedUrl هو embed URL كامل (لكليبات youtube.com/clip/)
+  // يُعرف بأنه يبدأ بـ https://www.youtube.com/embed/ ويحتوي على clip= أو clipt=
+  const url = clip.url || "";
+  if (/youtube\.com\/embed\//i.test(url)) {
+    // ✅ استخدمه مباشرةً مع autoplay
+    try {
+      const u = new URL(url);
+      u.searchParams.set("autoplay", "1");
+      u.searchParams.set("rel", "0");
+      // استبدل youtube.com بـ youtube-nocookie.com للخصوصية
+      return u.toString().replace("www.youtube.com/embed", "www.youtube-nocookie.com/embed");
+    } catch {
+      return url;
+    }
+  }
+
+  // الحالة 2: videoId محفوظ في DB
+  const videoId   = clip.videoId   || extractFromUrl(url).videoId;
+  const startTime = clip.startTime ?? extractFromUrl(url).startTime;
+  const endTime   = clip.endTime   ?? extractFromUrl(url).endTime;
+
+  if (videoId) return buildEmbedUrl(videoId, startTime, endTime);
+
+  return null;
 }
 
 // استخراج من URL احتياطي (للكليبات القديمة بدون videoId مخزّن)
 function extractFromUrl(url: string): { videoId: string | null; startTime: number; endTime: number } {
   if (!url) return { videoId: null, startTime: 0, endTime: 0 };
   try {
-    // /api/videos/ID_start-end.mp4
-    const local = url.match(/\/([a-zA-Z0-9_-]{11})_(\d+)-(\d+)\.mp4$/);
-    if (local) return { videoId: local[1], startTime: +local[2], endTime: +local[3] };
-
     const u = new URL(url);
     const v = u.searchParams.get("v");
     if (v) return {
@@ -42,23 +71,35 @@ function extractFromUrl(url: string): { videoId: string | null; startTime: numbe
     };
     const short = url.match(/youtu\.be\/([\w-]{11})/);
     if (short) return { videoId: short[1], startTime: 0, endTime: 0 };
+    const local = url.match(/\/([a-zA-Z0-9_-]{11})_(\d+)-(\d+)\.mp4$/);
+    if (local) return { videoId: local[1], startTime: +local[2], endTime: +local[3] };
   } catch {}
   return { videoId: null, startTime: 0, endTime: 0 };
 }
 
 // ─────────────────────────────────────────────────────────────
-//  مشغّل Kick — يجرّب الـ Embed أولاً، يظهر الزر عند الفشل
+//  مشغّل Kick
 // ─────────────────────────────────────────────────────────────
 function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
-  const clipId  = clip.videoId || "";   // الـ slug المحفوظ في DB
-  // ✅ رابط embed الصحيح لـ Kick
+  const clipId   = clip.videoId || "";
   const embedUrl = clipId ? `https://player.kick.com/clips/${clipId}` : null;
-  const [iframeOk, setIframeOk] = useState<boolean | null>(embedUrl ? null : false);
+
+  // نبدأ بمحاولة الـ iframe ونراقب إن كان يعمل
+  const [iframeStatus, setIframeStatus] = useState<"loading" | "ok" | "failed">(
+    embedUrl ? "loading" : "failed"
+  );
 
   const TAG_LABELS: Record<string, string> = {
     Funny: "😂 مضحك", Epic: "⚡ ملحمي",
     Glitch: "🐛 باج",  Skill: "🎯 مهارة", Horror: "👻 مرعب",
   };
+
+  // timeout: إذا لم يُحمَّل خلال 6 ثواني → fallback
+  useEffect(() => {
+    if (iframeStatus !== "loading") return;
+    const timer = setTimeout(() => setIframeStatus("failed"), 6000);
+    return () => clearTimeout(timer);
+  }, [iframeStatus]);
 
   return (
     <motion.div
@@ -76,7 +117,6 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
         className="relative w-full max-w-4xl mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* زر الإغلاق */}
         <button
           onClick={onClose}
           className="absolute -top-12 right-0 text-white/60 hover:text-white flex items-center gap-2 transition-colors"
@@ -85,22 +125,32 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
         </button>
 
         <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_60px_rgba(83,252,31,0.15)] bg-black">
-          <div className="aspect-video w-full">
-            {/* ✅ جرّب الـ iframe أولاً */}
-            {iframeOk !== false && embedUrl ? (
+          <div className="aspect-video w-full relative">
+
+            {/* iframe الـ Kick */}
+            {embedUrl && iframeStatus !== "failed" && (
               <iframe
                 key={clip.id}
                 src={embedUrl}
-                className="w-full h-full border-0"
+                className={`absolute inset-0 w-full h-full border-0 ${iframeStatus === "loading" ? "opacity-0" : "opacity-100"}`}
                 allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                 allowFullScreen
                 title={clip.title}
-                onLoad={() => setIframeOk(true)}
-                onError={() => setIframeOk(false)}
+                onLoad={() => setIframeStatus("ok")}
+                onError={() => setIframeStatus("failed")}
               />
-            ) : (
-              /* Fallback — زر "شاهد على Kick" مضمون دائماً */
-              <div className="flex flex-col items-center justify-center h-full gap-5 bg-black">
+            )}
+
+            {/* Spinner أثناء التحميل */}
+            {iframeStatus === "loading" && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black">
+                <Loader2 className="w-10 h-10 animate-spin text-[#53FC1F]" />
+              </div>
+            )}
+
+            {/* Fallback إذا فشل الـ iframe */}
+            {iframeStatus === "failed" && (
+              <div className="flex flex-col items-center justify-center h-full gap-5 bg-black min-h-[200px]">
                 {clip.thumbnailUrl && (
                   <img
                     src={clip.thumbnailUrl}
@@ -109,7 +159,6 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
                   />
                 )}
                 <div className="relative z-10 flex flex-col items-center gap-4">
-                  {/* شعار Kick */}
                   <div className="w-16 h-16 rounded-2xl bg-[#53FC1F]/10 border border-[#53FC1F]/30 flex items-center justify-center">
                     <svg viewBox="0 0 32 32" className="w-9 h-9" fill="#53FC1F">
                       <path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z"/>
@@ -117,7 +166,7 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
                   </div>
                   <p className="text-white/60 text-sm">لا يمكن تشغيل الكليب مدمجاً</p>
                   <a
-                    href={clip.url}
+                    href={clip.url?.startsWith("http") ? clip.url : `https://kick.com/clip/${clipId}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 bg-[#53FC1F] hover:bg-[#45e018] text-black font-bold px-6 py-3 rounded-xl text-sm transition-colors shadow-[0_0_20px_rgba(83,252,31,0.4)]"
@@ -130,7 +179,6 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
             )}
           </div>
 
-          {/* شريط معلومات الكليب */}
           <div className="bg-gradient-to-t from-black/90 to-black/60 p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -146,11 +194,11 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
                     </>
                   )}
                   <span className="w-1 h-1 rounded-full bg-white/30" />
-                  <span className="text-[#53FC1F]/70 text-xs font-semibold">Kick</span>
+                  <span className="text-[#53FC1F]/70 text-xs font-semibold uppercase tracking-wide">Kick</span>
                 </div>
               </div>
               <a
-                href={clip.url}
+                href={clip.url?.startsWith("http") ? clip.url : `https://kick.com/clip/${clipId}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-[#53FC1F]/70 transition-colors"
@@ -166,24 +214,21 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
 }
 
 // ─────────────────────────────────────────────────────────────
-//  مشغّل الشبح — يشغّل أي كليب داخل المنصة فورياً
+//  المشغّل الرئيسي — YouTube + Kick
 // ─────────────────────────────────────────────────────────────
 function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
-  const isKick = clip.platform === "kick";
+  // ✅ اكتشاف المنصة من platform أو من الـ URL احتياطياً
+  const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
 
-  // ── Kick Player ──────────────────────────────────────────
   if (isKick) {
-    return (
-      <KickGhostPlayer clip={clip} onClose={onClose} />
-    );
+    return <KickGhostPlayer clip={clip} onClose={onClose} />;
   }
 
   // ── YouTube Player ───────────────────────────────────────
-  const videoId   = clip.videoId   || extractFromUrl(clip.url).videoId;
-  const startTime = clip.startTime ?? extractFromUrl(clip.url).startTime;
-  const endTime   = clip.endTime   ?? extractFromUrl(clip.url).endTime;
-
-  const embedUrl = videoId ? buildEmbedUrl(videoId, startTime, endTime) : null;
+  const embedUrl = resolveYouTubeEmbedUrl(clip);
+  const videoId  = clip.videoId || extractFromUrl(clip.url).videoId;
+  const startTime = clip.startTime ?? 0;
+  const endTime   = clip.endTime   ?? 0;
 
   const TAG_LABELS: Record<string, string> = {
     Funny:  "😂 مضحك",  Epic:   "⚡ ملحمي",
@@ -206,7 +251,6 @@ function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
         className="relative w-full max-w-4xl mx-4"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* زر الإغلاق */}
         <button
           onClick={onClose}
           className="absolute -top-12 right-0 text-white/60 hover:text-white flex items-center gap-2 transition-colors"
@@ -214,7 +258,6 @@ function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
           <X className="w-5 h-5" /> إغلاق
         </button>
 
-        {/* ── مشغّل الفيديو ── */}
         <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_60px_rgba(168,85,247,0.2)] bg-black">
           <div className="aspect-video w-full">
             {embedUrl ? (
@@ -227,12 +270,10 @@ function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
                 title={clip.title}
               />
             ) : (
-              /* fallback: لا يوجد videoId أبداً → resolve من السيرفر */
               <FallbackPlayer clip={clip} />
             )}
           </div>
 
-          {/* شريط معلومات الكليب */}
           <div className="bg-gradient-to-t from-black/90 to-black/60 p-5">
             <div className="flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
@@ -281,15 +322,21 @@ function FallbackPlayer({ clip }: { clip: any }) {
   const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [failed,   setFailed]   = useState(false);
 
-  useState(() => {
+  useEffect(() => {
     fetch(`/api/resolve-url?url=${encodeURIComponent(clip.url)}`)
       .then(r => r.json())
       .then(d => {
-        if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
-        else setFailed(true);
+        // ✅ السيرفر قد يُعيد embedUrl كامل (للكليبات)
+        if (d.embedUrl) {
+          setEmbedUrl(d.embedUrl);
+        } else if (d.videoId) {
+          setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
+        } else {
+          setFailed(true);
+        }
       })
       .catch(() => setFailed(true));
-  });
+  }, [clip.url]);
 
   if (failed) return (
     <div className="flex flex-col items-center justify-center h-full gap-4 bg-black text-white">

@@ -20,7 +20,6 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
 let GUEST_USER_ID: number | null = null;
 
 async function ensureSystemUsers() {
-  // ── تأكد من وجود عمود submitter_name في جدول clips ──────
   if (pool) {
     try {
       const c = await pool.connect();
@@ -31,9 +30,10 @@ async function ensureSystemUsers() {
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS platform text DEFAULT 'youtube';`);
       c.release();
     } catch (e: any) {
-      console.warn("[migration] submitter_name column:", e?.message);
+      console.warn("[migration] columns:", e?.message);
     }
   }
+
   let guest = await storage.getUserByDiscordId("system-guest").catch(() => null);
   if (!guest) {
     guest = await storage.createUser({
@@ -170,7 +170,6 @@ export async function registerRoutes(
     res.json(clips);
   });
 
-  // ✅ مفتوح للجميع — الزوار يرسلون باسمهم فقط
   app.post(api.clips.create.path, async (req, res) => {
     try {
       const input = api.clips.create.input.parse(req.body);
@@ -193,7 +192,6 @@ export async function registerRoutes(
         tag:           input.tag,
         submittedBy,
         submitterName: req.isAuthenticated() ? (req.user as any).username : submitterName,
-        // ✅ حفظ بيانات التشغيل مباشرةً — صفر parsing عند العرض
         platform:      metadata.platform   || "youtube",
         videoId:       metadata.videoId    || null,
         startTime:     metadata.startTime  || 0,
@@ -259,7 +257,6 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ يحوّل أي رابط (YouTube أو Kick) إلى videoId + timestamps + platform
   app.get("/api/resolve-url", async (req, res) => {
     const url = req.query.url as string;
     if (!url) return res.status(400).json({ message: "url required" });
@@ -272,6 +269,8 @@ export async function registerRoutes(
         videoId:   meta.videoId   || null,
         startTime: meta.startTime || 0,
         endTime:   meta.endTime   || 0,
+        // ✅ للكليبات نُعيد embedUrl الكامل إذا كان موجوداً
+        embedUrl:  (meta as any).embedUrl || null,
       });
     } catch {
       res.status(400).json({ message: "Could not resolve URL" });
@@ -282,10 +281,9 @@ export async function registerRoutes(
 }
 
 // ─────────────────────────────────────────────────────────────
-//  Helpers — مشتركة بين YouTube و Kick
+//  Helpers — مشتركة
 // ─────────────────────────────────────────────────────────────
 
-/** تحوّل عدد الثواني إلى نص مثل "1:23" أو "1:02:05" */
 function formatDuration(seconds: number): string {
   if (!seconds || seconds <= 0) return "0:30";
   const hrs  = Math.floor(seconds / 3600);
@@ -301,22 +299,14 @@ function formatDuration(seconds: number): string {
 //  Kick Helpers
 // ─────────────────────────────────────────────────────────────
 
-/** هل الرابط من Kick؟ */
 function isKickUrl(url: string): boolean {
   return /kick\.com/i.test(url);
 }
 
-/**
- * يستخرج معرّف الكليب (slug) من روابط Kick المختلفة:
- *   https://kick.com/clip/CLIP_ID
- *   https://kick.com/username/clips/CLIP_ID   ← الشكل الجديد
- *   https://kick.com/username/clip/CLIP_ID    (رابط قديم)
- *   https://kick.com/video/CLIP_ID
- */
 function extractKickClipId(url: string): string | null {
   const patterns = [
     /kick\.com\/clip\/([A-Za-z0-9_-]+)/i,
-    /kick\.com\/[^/]+\/clips?\/([A-Za-z0-9_-]+)/i,   // clips أو clip
+    /kick\.com\/[^/]+\/clips?\/([A-Za-z0-9_-]+)/i,
     /kick\.com\/clips\/([A-Za-z0-9_-]+)/i,
     /kick\.com\/video\/([A-Za-z0-9_-]+)/i,
   ];
@@ -327,10 +317,6 @@ function extractKickClipId(url: string): string | null {
   return null;
 }
 
-/**
- * يجلب البيانات الوصفية لكليب Kick من Kick API العام
- * ثم يبني نفس شكل كائن metadata الذي تعيده fetchYouTubeMetadata
- */
 async function fetchKickMetadata(clipUrl: string) {
   const clipId = extractKickClipId(clipUrl);
 
@@ -339,10 +325,7 @@ async function fetchKickMetadata(clipUrl: string) {
       const resp = await fetch(
         `https://kick.com/api/v2/clips/${clipId}`,
         {
-          headers: {
-            "User-Agent": "Mozilla/5.0",
-            "Accept":     "application/json",
-          },
+          headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
           signal: AbortSignal.timeout(8000),
         }
       );
@@ -360,7 +343,7 @@ async function fetchKickMetadata(clipUrl: string) {
           thumbnailUrl: thumb,
           channelName:  channel,
           duration:     formatDuration(typeof duration === "number" ? duration : 30),
-          videoId:      clipId,    // نحفظ الـ slug هنا بدل videoId
+          videoId:      clipId,
           startTime:    0,
           endTime:      0,
         };
@@ -370,7 +353,6 @@ async function fetchKickMetadata(clipUrl: string) {
     }
   }
 
-  // Fallback — البيانات من URL فقط بدون API
   return {
     convertedUrl: clipUrl,
     platform:     "kick" as const,
@@ -393,31 +375,57 @@ function extractVideoId(url: string): string | null {
 }
 
 async function fetchYouTubeMetadata(clipUrl: string) {
-  const isClip = /youtube\.com\/clip\//.test(clipUrl);
+  // إزالة بارامتر si= (tracking) قبل المعالجة
+  const cleanUrl = clipUrl.replace(/[?&]si=[^&]*/g, "").replace(/\?$/, "").replace(/&$/, "");
+  const isClip = /youtube\.com\/clip\//.test(cleanUrl);
 
   if (isClip) {
     try {
       const resp = await fetch(
-        `https://www.youtube.com/oembed?url=${encodeURIComponent(clipUrl)}&format=json`,
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(cleanUrl)}&format=json`,
         { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) }
       );
       if (resp.ok) {
         const data = await resp.json() as any;
-        const videoId = (data?.thumbnail_url as string)?.match(/\/vi\/([\w-]{11})\//)?.[1] ?? null;
         const html: string = data?.html ?? "";
-        const startTime = parseInt(html.match(/[?&]start=(\d+)/)?.[1] ?? "0") || 0;
-        const endTime   = parseInt(html.match(/[?&]end=(\d+)/)?.[1]   ?? "0") || 0;
+
+        // ✅ استخراج رابط الـ embed الكامل مباشرةً من HTML (يحتوي على clip= و clipt=)
+        // مثال: src="https://www.youtube.com/embed/VIDEO_ID?clip=CLIP_ID&clipt=...&version=3"
+        const srcMatch = html.match(/src="(https:\/\/www\.youtube\.com\/embed\/[^"]+)"/);
+        const rawEmbedSrc = srcMatch?.[1] ?? null;
+
+        // بناء embed URL نظيف مع autoplay
+        let embedUrl: string | null = null;
+        if (rawEmbedSrc) {
+          // إضافة autoplay وإزالة feature=oembed غير الضرورية
+          const u = new URL(rawEmbedSrc);
+          u.searchParams.set("autoplay", "1");
+          u.searchParams.set("rel", "0");
+          u.searchParams.delete("feature");
+          embedUrl = u.toString();
+        }
+
+        // استخراج videoId من thumbnail_url
+        const videoId = (data?.thumbnail_url as string)?.match(/\/vi\/([\w-]{11})\//)?.[1] ?? null;
+
+        // استخراج start/end من embed src (إن وُجدا)
+        const startTime = parseInt(rawEmbedSrc?.match(/[?&]start=(\d+)/)?.[1] ?? "0") || 0;
+        const endTime   = parseInt(rawEmbedSrc?.match(/[?&]end=(\d+)/)?.[1]   ?? "0") || 0;
         const clipDuration = startTime && endTime && endTime > startTime ? endTime - startTime : 30;
+
         return {
-          convertedUrl: videoId ? `https://www.youtube.com/watch?v=${videoId}&start=${startTime}&end=${endTime}` : clipUrl,
+          // ✅ نحفظ رابط الـ embed الكامل كـ convertedUrl حتى يستخدمه المشغّل مباشرةً
+          convertedUrl: embedUrl ?? cleanUrl,
           platform:     "youtube" as const,
-          title:        (data.title as string) || "Gaming Clip",
+          title:        (data.title as string) || "YouTube Clip",
           thumbnailUrl: (data.thumbnail_url as string) || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : ""),
           channelName:  (data.author_name as string) || "Unknown Channel",
           duration:     formatDuration(clipDuration),
           videoId:      videoId ?? "",
           startTime,
           endTime,
+          // حقل إضافي للمشغّل (لا يُحفظ في DB لكن يُعيده الـ API)
+          embedUrl,
         };
       }
     } catch (err) {
@@ -425,13 +433,14 @@ async function fetchYouTubeMetadata(clipUrl: string) {
     }
   }
 
-  const videoId = extractVideoId(clipUrl) ?? "";
-  const urlObj  = (() => { try { return new URL(clipUrl); } catch { return null; } })();
+  // فيديو عادي أو clip فشل الـ oEmbed
+  const videoId = extractVideoId(cleanUrl) ?? "";
+  const urlObj  = (() => { try { return new URL(cleanUrl); } catch { return null; } })();
   const startTime = parseInt(urlObj?.searchParams.get("start") ?? "0") || 0;
   const endTime   = parseInt(urlObj?.searchParams.get("end")   ?? "0") || 0;
 
   return {
-    convertedUrl: clipUrl,
+    convertedUrl: cleanUrl,
     platform:     "youtube" as const,
     title:        "Gaming Clip",
     thumbnailUrl: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : "",
@@ -440,5 +449,6 @@ async function fetchYouTubeMetadata(clipUrl: string) {
     videoId,
     startTime,
     endTime,
+    embedUrl:     null,
   };
 }

@@ -1,34 +1,45 @@
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { Layout } from "@/components/layout";
 import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Flame, Clock, Trophy, Loader2 } from "lucide-react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Flame, Clock, Trophy, Loader2, Play, X, Maximize2, ExternalLink } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 // ─────────────────────────────────────────────────────────────
-//  استخراج videoId من الروابط الشائعة (client-side)
+//  بناء رابط الـ Embed من البيانات المحفوظة مسبقاً
 // ─────────────────────────────────────────────────────────────
-function quickParse(url: string): { videoId: string | null; startTime: number; endTime: number } {
+function buildEmbedUrl(videoId: string, startTime = 0, endTime = 0): string {
+  const p = new URLSearchParams({
+    autoplay:       "1",
+    rel:            "0",
+    modestbranding: "1",
+    start:          String(startTime),
+    enablejsapi:    "0",
+    iv_load_policy: "3",  // إخفاء التعليقات التوضيحية
+    color:          "white",
+  });
+  if (endTime > 0) p.set("end", String(endTime));
+  // youtube-nocookie = بدون كوكيز + أسرع تحميل
+  return `https://www.youtube-nocookie.com/embed/${videoId}?${p}`;
+}
+
+// استخراج من URL احتياطي (للكليبات القديمة بدون videoId مخزّن)
+function extractFromUrl(url: string): { videoId: string | null; startTime: number; endTime: number } {
   if (!url) return { videoId: null, startTime: 0, endTime: 0 };
   try {
-    const u = new URL(url.startsWith("/") ? `https://x.com${url}` : url);
     // /api/videos/ID_start-end.mp4
-    if (url.startsWith("/api/videos/")) {
-      const m = url.match(/\/([a-zA-Z0-9_-]{11})_(\d+)-(\d+)\.mp4$/);
-      if (m) return { videoId: m[1], startTime: +m[2], endTime: +m[3] };
-      const m2 = url.match(/\/([a-zA-Z0-9_-]{11})\.mp4$/);
-      if (m2) return { videoId: m2[1], startTime: 0, endTime: 0 };
-    }
-    // watch?v=
-    const v = new URL(url).searchParams.get("v");
+    const local = url.match(/\/([a-zA-Z0-9_-]{11})_(\d+)-(\d+)\.mp4$/);
+    if (local) return { videoId: local[1], startTime: +local[2], endTime: +local[3] };
+
+    const u = new URL(url);
+    const v = u.searchParams.get("v");
     if (v) return {
       videoId: v,
-      startTime: parseInt(new URL(url).searchParams.get("start") ?? "0") || 0,
-      endTime:   parseInt(new URL(url).searchParams.get("end")   ?? "0") || 0,
+      startTime: parseInt(u.searchParams.get("start") ?? "0") || 0,
+      endTime:   parseInt(u.searchParams.get("end")   ?? "0") || 0,
     };
-    // youtu.be/ID
     const short = url.match(/youtu\.be\/([\w-]{11})/);
     if (short) return { videoId: short[1], startTime: 0, endTime: 0 };
   } catch {}
@@ -36,104 +47,153 @@ function quickParse(url: string): { videoId: string | null; startTime: number; e
 }
 
 // ─────────────────────────────────────────────────────────────
-//  بناء رابط الـ IFrame المضمّن
+//  مشغّل الشبح — يشغّل أي كليب داخل المنصة فورياً
 // ─────────────────────────────────────────────────────────────
-function buildEmbedUrl(videoId: string, startTime: number, endTime: number): string {
-  const p = new URLSearchParams({
-    autoplay:       "1",
-    rel:            "0",
-    modestbranding: "1",
-    start:          String(startTime),
-    enablejsapi:    "1",
-  });
-  if (endTime > 0) p.set("end", String(endTime));
-  return `https://www.youtube-nocookie.com/embed/${videoId}?${p}`;
+function GhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
+  // ✅ الطريقة الأولى: videoId مخزّن مباشرةً في DB (للكليبات الجديدة)
+  const videoId   = clip.videoId   || extractFromUrl(clip.url).videoId;
+  const startTime = clip.startTime ?? extractFromUrl(clip.url).startTime;
+  const endTime   = clip.endTime   ?? extractFromUrl(clip.url).endTime;
+
+  const embedUrl = videoId ? buildEmbedUrl(videoId, startTime, endTime) : null;
+
+  const TAG_LABELS: Record<string, string> = {
+    Funny:  "😂 مضحك",  Epic:   "⚡ ملحمي",
+    Glitch: "🐛 باج",   Skill:  "🎯 مهارة",  Horror: "👻 مرعب",
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.85, opacity: 0, y: 30 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.85, opacity: 0, y: 30 }}
+        transition={{ type: "spring", damping: 22, stiffness: 260 }}
+        className="relative w-full max-w-4xl mx-4"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* زر الإغلاق */}
+        <button
+          onClick={onClose}
+          className="absolute -top-12 right-0 text-white/60 hover:text-white flex items-center gap-2 transition-colors"
+        >
+          <X className="w-5 h-5" /> إغلاق
+        </button>
+
+        {/* ── مشغّل الفيديو ── */}
+        <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-[0_0_60px_rgba(168,85,247,0.2)] bg-black">
+          <div className="aspect-video w-full">
+            {embedUrl ? (
+              <iframe
+                key={clip.id}
+                src={embedUrl}
+                className="w-full h-full border-0"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen
+                title={clip.title}
+              />
+            ) : (
+              /* fallback: لا يوجد videoId أبداً → resolve من السيرفر */
+              <FallbackPlayer clip={clip} />
+            )}
+          </div>
+
+          {/* شريط معلومات الكليب */}
+          <div className="bg-gradient-to-t from-black/90 to-black/60 p-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-white leading-tight mb-1 line-clamp-1">
+                  {clip.title}
+                </h2>
+                <div className="flex items-center gap-3 text-sm text-white/60">
+                  <span>بواسطة <span className="text-white/80 font-medium">{clip.submitterName || clip.submitter?.username || "زائر"}</span></span>
+                  {clip.tag && (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-white/30" />
+                      <span className="text-primary font-medium">{TAG_LABELS[clip.tag] ?? clip.tag}</span>
+                    </>
+                  )}
+                  {startTime > 0 && (
+                    <>
+                      <span className="w-1 h-1 rounded-full bg-white/30" />
+                      <span className="font-mono text-xs bg-white/10 px-2 py-0.5 rounded">
+                        {Math.floor(startTime/60)}:{String(startTime%60).padStart(2,"0")}
+                        {endTime > 0 && ` → ${Math.floor(endTime/60)}:${String(endTime%60).padStart(2,"0")}`}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+              {videoId && (
+                <a
+                  href={`https://www.youtube.com/watch?v=${videoId}&t=${startTime}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/40 hover:text-white/70 transition-colors"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" /> YouTube
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
 }
 
-// ─────────────────────────────────────────────────────────────
-//  SmartPlayer — يشغّل الكليب داخل المنصة دائماً
-// ─────────────────────────────────────────────────────────────
-function SmartPlayer({ clip }: { clip: any }) {
-  const parsed = quickParse(clip.url);
-  const [embedUrl, setEmbedUrl] = useState<string | null>(
-    parsed.videoId ? buildEmbedUrl(parsed.videoId, parsed.startTime, parsed.endTime) : null
-  );
-  const [loading, setLoading] = useState(!parsed.videoId);
-  const [failed, setFailed] = useState(false);
+// Fallback: يستدعي السيرفر لتحويل الرابط
+function FallbackPlayer({ clip }: { clip: any }) {
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [failed,   setFailed]   = useState(false);
 
-  useEffect(() => {
-    // إذا استطعنا استخراج videoId مباشرة → لا حاجة لطلب السيرفر
-    if (parsed.videoId) return;
-
-    // URL معقّد (مثل /clip/) → نطلب من السيرفر يحوّله
-    setLoading(true);
+  useState(() => {
     fetch(`/api/resolve-url?url=${encodeURIComponent(clip.url)}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.videoId) {
-          setEmbedUrl(buildEmbedUrl(data.videoId, data.startTime || 0, data.endTime || 0));
-        } else {
-          setFailed(true);
-        }
+      .then(r => r.json())
+      .then(d => {
+        if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
+        else setFailed(true);
       })
-      .catch(() => setFailed(true))
-      .finally(() => setLoading(false));
-  }, [clip.url]);
+      .catch(() => setFailed(true));
+  });
 
-  // ── جاري التحويل ──────────────────────────────────────────
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full bg-black text-white gap-3">
-        <Loader2 className="w-10 h-10 animate-spin text-primary" />
-        <p className="text-sm text-gray-400">جاري تجهيز الكليب...</p>
-      </div>
-    );
-  }
-
-  // ✅ لدينا embedUrl → شغّل مباشرة داخل المنصة
-  if (embedUrl) {
-    return (
-      <iframe
-        key={clip.id}
-        src={embedUrl}
-        className="w-full h-full border-0 bg-black"
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-        allowFullScreen
-        title={clip.title}
-        loading="eager"
-      />
-    );
-  }
-
-  // ❌ فشل التحويل → رابط بديل
-  if (failed) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 bg-black text-white px-6 text-center">
-        <p className="text-base font-semibold text-gray-200">{clip.title}</p>
-        <p className="text-sm text-gray-400">يمكنك مشاهدة هذا الكليب مباشرةً على YouTube</p>
-        <a
-          href={clip.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl text-sm font-bold transition-colors"
-        >
-          شاهد على YouTube ↗
-        </a>
-      </div>
-    );
-  }
-
-  return null;
+  if (failed) return (
+    <div className="flex flex-col items-center justify-center h-full gap-4 bg-black text-white">
+      <p className="text-sm text-white/60">لا يمكن تشغيل هذا الكليب مباشرةً</p>
+      <a href={clip.url} target="_blank" rel="noopener noreferrer"
+        className="bg-red-600 hover:bg-red-700 text-white px-5 py-2.5 rounded-lg text-sm font-bold transition-colors">
+        شاهد على YouTube ↗
+      </a>
+    </div>
+  );
+  if (!embedUrl) return (
+    <div className="flex items-center justify-center h-full bg-black">
+      <Loader2 className="w-10 h-10 animate-spin text-primary" />
+    </div>
+  );
+  return (
+    <iframe src={embedUrl} className="w-full h-full border-0"
+      allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen title={clip.title} />
+  );
 }
 
 // ─────────────────────────────────────────────────────────────
 export default function Home() {
-  const [sortBy, setSortBy] = useState<"new" | "top">("new");
-  const [selectedClip, setSelectedClip] = useState<any>(null);
+  const [sortBy, setSortBy]         = useState<"new" | "top">("new");
+  const [selectedClip, setSelected] = useState<any>(null);
   const { data: user } = useUser();
   const isAdmin = user?.role === "admin";
 
   const { data: clips, isLoading, error } = useClips({ status: "approved", sort: sortBy });
+
+  const openClip  = useCallback((clip: any) => setSelected(clip), []);
+  const closeClip = useCallback(() => setSelected(null), []);
 
   return (
     <Layout>
@@ -151,15 +211,15 @@ export default function Home() {
               الألعاب الملحمية
             </span>
           </h1>
-          <p className="text-lg text-muted-foreground mb-8">
+          <p className="text-lg text-muted-foreground">
             أفضل المقاطع من المجتمع، يتم تصنيفها من قبلك. أرسل مقاطعك، صوّت على الآخرين، وتسلق لوحة الترتيب.
           </p>
         </div>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center justify-between mb-8">
-        <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as any)} className="w-[400px]">
+      <div className="mb-8">
+        <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
           <TabsList className="bg-card border border-border/50 p-1 h-12">
             <TabsTrigger value="new" className="h-10 data-[state=active]:bg-primary data-[state=active]:text-white">
               <Clock className="w-4 h-4 ml-2" /> الأحدث
@@ -179,39 +239,21 @@ export default function Home() {
           ))}
         </div>
       ) : error ? (
-        <div className="text-center py-20">
-          <p className="text-destructive">فشل في تحميل المقاطع.</p>
-        </div>
+        <div className="text-center py-20 text-destructive">فشل في تحميل المقاطع.</div>
       ) : clips?.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <p>لا توجد مقاطع بعد. كن الأول!</p>
-        </div>
+        <div className="text-center py-20 text-muted-foreground">لا توجد مقاطع بعد. كن الأول!</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {clips?.map((clip: any) => (
-            <ClipCard key={clip.id} clip={clip} onPlay={() => setSelectedClip(clip)} isAdmin={isAdmin} />
+            <ClipCard key={clip.id} clip={clip} onPlay={() => openClip(clip)} isAdmin={isAdmin} />
           ))}
         </div>
       )}
 
-      {/* ── مشغّل الكليب ── */}
-      <Dialog open={!!selectedClip} onOpenChange={() => setSelectedClip(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black border-border/50">
-          <div className="aspect-video w-full">
-            {selectedClip && <SmartPlayer clip={selectedClip} />}
-          </div>
-          {selectedClip && (
-            <div className="p-6 bg-card">
-              <h2 className="text-2xl font-bold font-display mb-1">{selectedClip.title}</h2>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>بواسطة {selectedClip.submitterName || selectedClip.submitter?.username || "زائر"}</span>
-                <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
-                <span>{selectedClip.tag}</span>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* ── المشغّل الشبح ── */}
+      <AnimatePresence>
+        {selectedClip && <GhostPlayer clip={selectedClip} onClose={closeClip} />}
+      </AnimatePresence>
     </Layout>
   );
 }

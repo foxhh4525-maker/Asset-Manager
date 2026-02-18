@@ -25,6 +25,9 @@ async function ensureSystemUsers() {
     try {
       const c = await pool.connect();
       await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS submitter_name text;`);
+      await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS video_id text;`);
+      await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS start_time integer DEFAULT 0;`);
+      await c.query(`ALTER TABLE clips ADD COLUMN IF NOT EXISTS end_time integer DEFAULT 0;`);
       c.release();
     } catch (e: any) {
       console.warn("[migration] submitter_name column:", e?.message);
@@ -187,6 +190,10 @@ export async function registerRoutes(
         tag:           input.tag,
         submittedBy,
         submitterName: req.isAuthenticated() ? (req.user as any).username : submitterName,
+        // ✅ حفظ بيانات التشغيل مباشرةً — صفر parsing عند العرض
+        videoId:       metadata.videoId   || null,
+        startTime:     metadata.startTime || 0,
+        endTime:       metadata.endTime   || 0,
         upvotes:       0,
         downvotes:     0,
         status:        "pending",

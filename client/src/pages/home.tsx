@@ -163,13 +163,26 @@ function PlayerModal({ clip, onClose, accentColor, children }: { clip: any; onCl
 //  Kick: redirect (لا يدعمون embed خارج منصتهم)
 // ─────────────────────────────────────────────────────────────
 
+/** هل الرابط mp4 مباشر (Kick CDN أو ما شابه)؟ */
+function isDirectVideoUrl(url: string): boolean {
+  return /\.(mp4|webm|m3u8)(\?|$)/i.test(url)
+    || /clips\.(kick|twitch)\.tv/i.test(url)
+    || /edge\.(kick|twitch)\.tv/i.test(url)
+    || /d2nvs31859zcd8\.cloudfront\.net/i.test(url)
+    || /media\.kick\.com/i.test(url);
+}
+
 /** يبني embed URL من بيانات الكليب المخزّنة (بدون API call) */
 function getStoredEmbedUrl(clip: any): string | null {
   const url = clip.url || "";
   const isKick = /kick\.com/i.test(url) || clip.platform === "kick";
 
-  // ─── Kick embed ───────────────────────────────────────────
+  // ─── Kick ─────────────────────────────────────────────────
   if (isKick) {
+    // ✅ الأولوية: mp4 مباشر مخزّن في videoId (من API)
+    if (clip.videoId && isDirectVideoUrl(clip.videoId)) return clip.videoId;
+    // url مباشر مخزّن في url field
+    if (isDirectVideoUrl(url)) return url;
     // إذا خُزِّن رابط player.kick.com مباشرة
     if (/player\.kick\.com/i.test(url)) return url;
     // استخراج UUID أو slug من URL
@@ -187,16 +200,21 @@ function getStoredEmbedUrl(clip: any): string | null {
       const u = new URL(url);
       u.searchParams.set("autoplay", "1");
       u.searchParams.set("rel", "0");
+      // ✅ لا نستبدل بـ nocookie إذا كان clip/clipt موجود — يكسر الـ clip!
+      if (u.searchParams.has("clip") || u.searchParams.has("clipt")) {
+        return u.toString().replace("www.youtube-nocookie.com/embed", "www.youtube.com/embed");
+      }
       return u.toString().replace("www.youtube.com/embed", "www.youtube-nocookie.com/embed");
     } catch { return url; }
   }
   // youtube.com/clip/ مع videoId مخزّن
   if (/youtube\.com\/clip\//i.test(url) && clip.videoId) {
     const clipId = url.match(/\/clip\/([A-Za-z0-9_-]+)/)?.[1];
-    if (clipId) return `https://www.youtube-nocookie.com/embed/${clip.videoId}?clip=${clipId}&autoplay=1&rel=0&modestbranding=1`;
+    // ✅ استخدام youtube.com (ليس nocookie) للـ clip embeds
+    if (clipId) return `https://www.youtube.com/embed/${clip.videoId}?clip=${clipId}&autoplay=1&rel=0&modestbranding=1`;
   }
   // videoId مخزّن مباشرة
-  if (clip.videoId) {
+  if (clip.videoId && !isDirectVideoUrl(clip.videoId)) {
     return buildEmbedUrl(clip.videoId, clip.startTime || 0, clip.endTime || 0);
   }
   // استخراج من رابط watch?v=
@@ -265,7 +283,7 @@ function PlayerFailed({ clip, platform }: { clip: any; platform: "youtube" | "ki
   );
 }
 
-/** المشغّل الموحّد — يعرض iframe مباشرةً أو fallback */
+/** المشغّل الموحّد — يعرض iframe أو HTML5 video أو fallback */
 function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
   const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
   const accentColor = isKick ? "#53FC1F" : "rgba(168,85,247,0.9)";
@@ -274,6 +292,9 @@ function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void })
   const [embedUrl, setEmbedUrl] = useState<string | null>(() => getStoredEmbedUrl(clip));
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+
+  // هل هو رابط mp4 مباشر؟ (Kick CDN)
+  const isDirect = !!embedUrl && isDirectVideoUrl(embedUrl);
 
   useEffect(() => {
     // إذا عندنا embed URL — لا نحتاج API
@@ -285,6 +306,9 @@ function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void })
     fetch(`/api/resolve-url?url=${encodeURIComponent(url)}`)
       .then(r => r.json())
       .then(d => {
+        // ✅ تحقق من direct mp4 أولاً
+        const directUrl = d.directVideoUrl || d.clipUrl;
+        if (directUrl && isDirectVideoUrl(directUrl)) { setEmbedUrl(directUrl); return; }
         if (d.embedUrl) setEmbedUrl(d.embedUrl);
         else if (d.kickEmbedUrl) setEmbedUrl(d.kickEmbedUrl);
         else if (d.videoId && !isKick) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
@@ -301,8 +325,25 @@ function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void })
       {/* ── جاري التحميل ─────────────────────────────── */}
       {loading && !embedUrl && <PlayerLoading clip={clip} />}
 
-      {/* ── iframe للمشاهدة المباشرة (YouTube + Kick) ── */}
-      {canEmbed && (
+      {/* ── HTML5 video مباشر (Kick mp4) ────────────── */}
+      {canEmbed && isDirect && (
+        <div className="relative w-full aspect-video bg-black">
+          <video
+            key={embedUrl}
+            src={embedUrl}
+            className="w-full h-full block"
+            controls
+            autoPlay
+            playsInline
+            style={{ display: "block" }}
+          >
+            <source src={embedUrl} type="video/mp4" />
+          </video>
+        </div>
+      )}
+
+      {/* ── iframe للمشاهدة المباشرة (YouTube + Kick player) ── */}
+      {canEmbed && !isDirect && (
         <div className="relative w-full aspect-video bg-black">
           <iframe
             key={embedUrl}

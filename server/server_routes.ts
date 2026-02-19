@@ -306,16 +306,22 @@ export async function registerRoutes(
       // ─── تحديد embed URL للـ client ──────────────────────────
       const isYTEmbed  = /youtube(-nocookie)?\.com\/embed\//i.test(meta.convertedUrl || "");
       const isKickEmbed = /player\.kick\.com/i.test(meta.convertedUrl || "");
+      // ✅ تحقق إذا كان رابط mp4 مباشر (Kick CDN)
+      const isDirectVideo = /\.(mp4|webm|m3u8)(\?|$)/i.test(meta.convertedUrl || "")
+        || /clips\.(kick|twitch)\.tv/i.test(meta.convertedUrl || "")
+        || /edge\.(kick|twitch)\.tv/i.test(meta.convertedUrl || "")
+        || /media\.kick\.com/i.test(meta.convertedUrl || "");
 
       res.json({
-        platform:     meta.platform     || "youtube",
-        videoId:      meta.videoId      || null,
-        startTime:    meta.startTime    || 0,
-        endTime:      meta.endTime      || 0,
-        embedUrl:     isYTEmbed  ? meta.convertedUrl : null,
-        kickEmbedUrl: isKickEmbed ? meta.convertedUrl : null,
-        title:        meta.title        || null,
-        thumbnailUrl: meta.thumbnailUrl || null,
+        platform:        meta.platform     || "youtube",
+        videoId:         meta.videoId      || null,
+        startTime:       meta.startTime    || 0,
+        endTime:         meta.endTime      || 0,
+        embedUrl:        isYTEmbed  ? meta.convertedUrl : null,
+        kickEmbedUrl:    isKickEmbed ? meta.convertedUrl : null,
+        directVideoUrl:  isDirectVideo ? meta.convertedUrl : null,
+        title:           meta.title        || null,
+        thumbnailUrl:    meta.thumbnailUrl || null,
       });
     } catch {
       res.status(400).json({ message: "Could not resolve URL" });
@@ -840,20 +846,28 @@ async function fetchKickMetadata(clipUrl: string) {
           const thumb   = clip?.thumbnail_url || clip?.thumbnail || clip?.thumb || clip?.clip_thumbnail || "";
           const channel = clip?.channel?.slug || clip?.channel?.username || clip?.streamer?.username || clip?.channel_name || "Kick";
           const dur     = typeof clip?.duration === "number" ? clip.duration : (typeof clip?.duration_seconds === "number" ? clip.duration_seconds : 30);
-          // محاولة استخراج UUID لبناء embed URL
+          // ✅ استخراج رابط الـ mp4 المباشر من الـ API (الأولوية القصوى)
+          const directMp4 = clip?.clip_url || clip?.video_url || clip?.playback_url
+            || clip?.source || clip?.stream_url
+            || clip?.video?.src || clip?.video?.url
+            || null;
+          // UUID لبناء embed URL كـ fallback
           const uuid = clip?.id || clip?.uuid || clip?.video_id || clip?.video?.id || null;
           const embedUrl = uuid
             ? `https://player.kick.com/video/${uuid}`
             : (clipId ? `https://player.kick.com/video/${clipId}` : clipUrl);
-          console.log("[Kick] Got metadata:", { title, thumb, channel, uuid, embedUrl });
+          console.log("[Kick] Got metadata:", { title, thumb, channel, uuid, directMp4, embedUrl });
           return {
-            convertedUrl: embedUrl,   // ✅ نحفظ embed URL مباشرة
+            // إذا وجدنا mp4 مباشر، نحفظه في url للتشغيل المباشر
+            // وإلا نحفظ embed URL
+            convertedUrl: directMp4 || embedUrl,
             platform:     "kick" as const,
             title,
             thumbnailUrl: thumb,
             channelName:  channel,
             duration:     formatDuration(dur),
-            videoId:      uuid || clipId || "",
+            // ✅ نحفظ الـ mp4 المباشر في videoId إذا وُجد، وإلا الـ uuid
+            videoId:      directMp4 || uuid || clipId || "",
             startTime:    0,
             endTime:      0,
           };
@@ -917,27 +931,28 @@ async function fetchYouTubeMetadata(clipUrl: string) {
         const html: string = data?.html ?? "";
         const videoId = (data?.thumbnail_url as string)?.match(/\/vi\/([\w-]{11})\//)?.[1] ?? null;
 
-        // ─── استخراج src الكامل من HTML embed ──────────────
-        const srcMatch = html.match(/src="([^"]+)"/);
-        const embedSrc = srcMatch?.[1] ?? "";
+        // ─── استخراج src الكامل من HTML embed (regex محسّنة) ──
+        const srcMatch = html.match(/src=["']([^"']+)["']/);
+        const embedSrc = srcMatch?.[1] ? decodeURIComponent(srcMatch[1].replace(/&amp;/g, "&")) : "";
         console.log("[YT Clip] embed src:", embedSrc);
 
         // ─── استخراج clip + clipt params من src ──────────
         let embedUrl: string;
         if (embedSrc.includes("clip=") || embedSrc.includes("clipt=")) {
-          // نستخدم الـ src مباشرة مع إضافة autoplay
+          // ✅ نستخدم الـ src مباشرة بدون تغيير المنصة (clipt لا يعمل مع nocookie)
           try {
             const u = new URL(embedSrc);
             u.searchParams.set("autoplay", "1");
             u.searchParams.set("rel", "0");
-            // تحويل إلى youtube-nocookie للخصوصية
-            embedUrl = u.toString().replace("www.youtube.com/embed", "www.youtube-nocookie.com/embed");
+            // ✅ إذا كان clip + clipt موجود، نستخدم youtube.com/embed مباشرة (ليس nocookie)
+            // لأن clipt parameter لا يعمل مع youtube-nocookie
+            embedUrl = u.toString();
           } catch {
             embedUrl = embedSrc;
           }
         } else if (videoId && clipId) {
-          // fallback: بناء embed URL مع clip parameter
-          embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?clip=${clipId}&autoplay=1&rel=0`;
+          // fallback: بناء embed URL مع clip parameter فقط
+          embedUrl = `https://www.youtube.com/embed/${videoId}?clip=${clipId}&autoplay=1&rel=0`;
         } else {
           embedUrl = embedSrc || clipUrl;
         }

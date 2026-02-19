@@ -22,10 +22,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const isAdmin   = user?.role === "admin";
   const isVisitor = !user;
 
-  // أفاتار الزائر
-  const visitorAvatar = identity
-    ? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed)
-    : null;
+  // أفاتار الزائر: استخدم الصورة المخصصة (base64) إذا وُجدت، وإلا حاول توليدها
+  const visitorAvatar = identity?.customAvatar ?? (
+    identity ? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed) : null
+  );
 
   const NavLink = ({ href, icon: Icon, children, onClick }: {
     href: string; icon: any; children: React.ReactNode; onClick?: () => void;

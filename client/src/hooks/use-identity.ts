@@ -9,6 +9,8 @@ import { useState, useCallback } from "react";
 export interface VisitorIdentity {
   name: string;
   customAvatar?: string | null; // base64 صورة مخصصة
+  avatarStyle?: string | null;
+  avatarSeed?: string | null;
 }
 
 const STORAGE_KEY = "scHub_visitor_identity_v2";
@@ -45,5 +47,14 @@ export function useIdentity() {
   /** الـ URL / base64 الجاهز للعرض — أو null إذا لا توجد صورة */
   const avatarUrl = identity?.customAvatar ?? null;
 
+  return { identity, setIdentity, clearIdentity, avatarUrl };
+
+
+export function buildAvatarUrl(style?: string | null, seed?: string | null): string | null {
+  if (!style || !seed) return null;
+  const s = encodeURIComponent(style);
+  const sd = encodeURIComponent(seed);
+  return `https://api.dicebear.com/10.x/${s}/svg?seed=${sd}`;
+}
   return { identity, setIdentity, clearIdentity, avatarUrl };
 }

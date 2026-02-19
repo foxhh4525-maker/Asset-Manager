@@ -2,17 +2,16 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import {
   Loader2, ArrowLeft, Youtube, CheckCircle2,
-  Film, Clock, ArrowRight, Pencil, User, Sparkles,
+  Film, Clock, ArrowRight, Pencil, Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useCreateClip, useClipMetadata } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";

@@ -597,15 +597,12 @@ function ArtViewer({ art, onClose, onRate }: {
 export default function DreamArtists() {
   const { data: user } = useUser();
   const isAdmin = user?.role === "admin";
-  const [tab, setTab] = useState<"approved" | "pending">("approved");
   const [selected, setSelected] = useState<Artwork | null>(null);
   const [ratingTarget, setRatingTarget] = useState<Artwork | null>(null);
   const action = useArtworkAction();
 
-  const statusQuery = isAdmin ? tab : "approved";
-  // زوار يرون فقط approved، لكن يظهر لهم رسائل إذا كان هناك رسمات قيد المراجعة
-  const { data: artworks = [], isLoading } = useArtworks(statusQuery);
-  const { data: pendingMine = [] } = useArtworks("pending");  // لإظهار إشعار للزائر
+  // لا نظهر تبويب "الانتظار" هنا — نعرض فقط الأعمال المعتمدة للعامة
+  const { data: artworks = [], isLoading } = useArtworks("approved");
 
   const handleAction = useCallback((id: number, act: "approved" | "rejected" | "delete") => {
     action.mutate({ id, action: act });
@@ -654,22 +651,11 @@ export default function DreamArtists() {
       {/* Admin tabs */}
       {isAdmin && (
         <div className="flex gap-2 mb-5 sm:mb-6">
-          {([
-            { id: "approved", label: "✅ المقبولة" },
-            { id: "pending", label: "⏳ الانتظار" },
-          ] as const).map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-sm sm:text-base ${
-                tab === t.id
-                  ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]"
-                  : "bg-[#1a1a2e] text-white/60 hover:text-white border border-white/10"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+          <button
+            className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl font-medium transition-all text-sm sm:text-base bg-purple-600 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]`}
+          >
+            ✅ المقبولة
+          </button>
         </div>
       )}
 

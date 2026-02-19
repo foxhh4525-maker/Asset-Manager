@@ -214,6 +214,26 @@ export default function Studio() {
   const { data: user, isLoading: isAuthLoading } = useUser();
   const { data: clips = [], isLoading, error } = useClips({ status: "pending", sort: "new" });
   const updateStatus = useUpdateClipStatus();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const { data: artworks = [] } = useQuery({
+    queryKey: ["/api/artworks", "pending"],
+    queryFn: () => fetch(`/api/artworks?status=pending`).then(r => r.ok ? r.json() : []),
+  });
+
+  const updateArtworkStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await fetch(`/api/artworks/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed");
+      return await res.json();
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/artworks"] }); toast({ title: "تم تحديث حالة العمل" }); },
+  });
   const [current, setCurrent] = useState(0);
   const currentClip = (clips as any[])?.[current];
 
@@ -305,7 +325,7 @@ export default function Studio() {
               )}
             </div>
 
-            {/* ── قائمة الانتظار ── */}
+            {/* ── قائمة الانتظار (كليبات) ── */}
             <div className="bg-card border border-border/50 rounded-xl p-4">
               <h3 className="font-semibold mb-3 text-right">قائمة الانتظار ({(clips as any[]).length})</h3>
               <ScrollArea className="h-[420px]">
@@ -341,6 +361,34 @@ export default function Studio() {
                         </div>
                       </div>
                     </motion.div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+
+            {/* ── رسومات بانتظار المراجعة ── */}
+            <div className="bg-card border border-border/50 rounded-xl p-4">
+              <h3 className="font-semibold mb-3 text-right">رسومات بانتظار المراجعة ({(artworks as any[]).length})</h3>
+              <ScrollArea className="h-[420px]">
+                <div className="space-y-3">
+                  {(artworks as any[]).map((art: any) => (
+                    <div key={art.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/40">
+                      <div className="w-16 h-12 bg-black rounded overflow-hidden">
+                        <img src={art.imageData} alt={art.artistName} className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-sm font-semibold">{art.artistName}</p>
+                            <p className="text-xs text-white/40">{new Date(art.createdAt).toLocaleString()}</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button onClick={() => updateArtworkStatus.mutate({ id: art.id, status: 'approved' })} className="bg-green-600 text-white">قبول</Button>
+                            <Button variant="destructive" onClick={() => updateArtworkStatus.mutate({ id: art.id, status: 'rejected' })}>رفض</Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>

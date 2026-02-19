@@ -13,6 +13,9 @@ import AdminLogin from "@/pages/admin-login";
 import DrawPage from "@/pages/DrawPage";
 import DreamArtists from "@/pages/DreamArtists";
 import { useUser } from "@/hooks/use-auth";
+import { IdentityModal } from "@/components/identity-modal";
+import { useIdentity } from "@/hooks/use-identity";
+import { useEffect, useState } from "react";
 
 // ✅ حماية صفحة الاستديو — يُسمح فقط للأدمن
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
@@ -52,10 +55,26 @@ function Router() {
 }
 
 function App() {
+  const { identity } = useIdentity();
+  const [showIdentity, setShowIdentity] = useState(false);
+
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem("sc_seen_identity_modal_v1");
+      if (!identity && !seen) setShowIdentity(true);
+    } catch {}
+  }, [identity]);
+
+  const handleIdentitySave = () => {
+    try { localStorage.setItem("sc_seen_identity_modal_v1", "1"); } catch {}
+    setShowIdentity(false);
+  };
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
+        <IdentityModal open={showIdentity} onClose={() => setShowIdentity(false)} onSave={handleIdentitySave} />
         <Router />
       </TooltipProvider>
     </QueryClientProvider>

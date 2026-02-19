@@ -476,7 +476,7 @@ function SkeletonCard() {
 // ─────────────────────────────────────────────────────────────
 //  تعريف الأقسام
 // ─────────────────────────────────────────────────────────────
-type SectionId = "verified" | "art" | "community";
+type SectionId = "verified" | "community";
 
 const SECTIONS = [
   {
@@ -493,21 +493,6 @@ const SECTIONS = [
     gradient: "linear-gradient(135deg, rgba(168,85,247,0.18) 0%, rgba(168,85,247,0.04) 100%)",
     badge: "موثّق",
     badgeColor: "#a855f7",
-  },
-  {
-    id: "art" as SectionId,
-    icon: Palette,
-    emoji: "🎨",
-    title: "الرسم والصور",
-    subtitle: "إبداعات المجتمع البصرية",
-    description: "أعمال فنية ورسومات وصور مشاركة من أعضاء المجتمع",
-    accent: "#06b6d4",
-    accentBg: "rgba(6,182,212,0.12)",
-    accentBorder: "rgba(6,182,212,0.3)",
-    glow: "rgba(6,182,212,0.4)",
-    gradient: "linear-gradient(135deg, rgba(6,182,212,0.18) 0%, rgba(6,182,212,0.04) 100%)",
-    badge: "إبداع",
-    badgeColor: "#06b6d4",
   },
   {
     id: "community" as SectionId,
@@ -779,6 +764,55 @@ function ClipsSection({ section, status, isAdmin, sortBy, initialClip }: {
         {selectedClip && <GhostPlayer clip={selectedClip} onClose={closeClip} />}
       </AnimatePresence>
     </>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Community section — يجمع كليبات ورسومات الحالة 'pending'
+// ─────────────────────────────────────────────────────────────
+function CommunitySection({ section, isAdmin, sortBy }: { section: typeof SECTIONS[number]; isAdmin: boolean; sortBy: "new" | "top" }) {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoading(true);
+    Promise.all([
+      fetch(`/api/clips?status=pending&sort=${sortBy}`).then(r => r.ok ? r.json() : [] as any[]).catch(() => []),
+      fetch(`/api/artworks?status=pending`).then(r => r.ok ? r.json() : [] as any[]).catch(() => []),
+    ]).then(([clips, artworks]) => {
+      if (!mounted) return;
+      // normalize and merge, keep newest first by createdAt
+      const normClips = (clips || []).map((c: any) => ({ type: "clip", id: `clip-${c.id}`, payload: c, createdAt: c.createdAt || Date.now() }));
+      const normArts  = (artworks || []).map((a: any) => ({ type: "art", id: `art-${a.id}`, payload: a, createdAt: a.createdAt || Date.now() }));
+      const merged = [...normClips, ...normArts].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setItems(merged);
+    }).finally(() => { if (mounted) setLoading(false); });
+    return () => { mounted = false; };
+  }, [sortBy]);
+
+  if (loading) return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      {[...Array(8)].map((_, i) => <div key={i} className="h-48 bg-white/6 rounded-2xl animate-pulse" />)}
+    </div>
+  );
+
+  if (items.length === 0) return (
+    <div className="text-center py-24 text-muted-foreground">لا توجد مشاركات حالياً</div>
+  );
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+      {items.map((it) => (
+        <div key={it.id}>
+          {it.type === "clip" ? (
+            <ClipCard clip={it.payload} onPlay={() => { /* open handled in parent if needed */ }} isAdmin={isAdmin} />
+          ) : (
+            <ArtworkCard art={it.payload} onClick={() => { /* placeholder */ }} />
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1107,11 +1141,8 @@ export default function Home() {
             {activeSection === "verified" && (
               <ClipsSection section={currentSection} status="approved" isAdmin={isAdmin} sortBy={sortBy} initialClip={sharedClip} />
             )}
-            {activeSection === "art" && (
-              <ArtSection section={currentSection} />
-            )}
             {activeSection === "community" && (
-              <ClipsSection section={currentSection} status="pending" isAdmin={isAdmin} sortBy={sortBy} />
+              <CommunitySection section={currentSection} isAdmin={isAdmin} sortBy={sortBy} />
             )}
           </motion.div>
         )}

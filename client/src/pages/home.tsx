@@ -374,7 +374,7 @@ function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void })
   const isExternal = playerType === "external" || (failed && !embedUrl);
 
   return (
-    <PlayerModal clip={clip} onClose={onClose} accentColor={accentColor}>
+      <PlayerModal clip={clip} onClose={onClose} accentColor={accentColor}>
       {/* ── جاري التحميل ─────────────────────────────── */}
       {loading && <PlayerLoading clip={clip} />}
 

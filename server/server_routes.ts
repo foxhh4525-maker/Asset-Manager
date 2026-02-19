@@ -8,9 +8,7 @@ import connectPgSimple from "connect-pg-simple";
 import { pool } from "./db";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
-import express from "express";
 import path from "path";
-import { storage as st } from "./storage";
 
 // ─────────────────────────────────────────────────────────────
 // كلمة مرور الأدمن — غيّرها في Replit Secrets: ADMIN_PASSWORD

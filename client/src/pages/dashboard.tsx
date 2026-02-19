@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
 import { Layout } from "@/components/layout";
 import ReactPlayer from "react-player";
@@ -7,16 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Check, X, SkipForward, Play } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clip } from "@shared/schema";
 
 export default function Dashboard() {
   // Fetch pending clips for review queue
   const { data: clips, isLoading } = useClips({ status: 'pending', sort: 'new' });
   const updateStatus = useUpdateClipStatus();
-  
+
   const [currentClipIndex, setCurrentClipIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true);
-  
+
   const currentClip = clips?.[currentClipIndex];
 
   const handleNext = () => {
@@ -30,7 +29,7 @@ export default function Dashboard() {
 
   const handleDecision = async (status: 'approved' | 'rejected') => {
     if (!currentClip) return;
-    
+
     await updateStatus.mutateAsync({ id: currentClip.id, status });
     // Optimistically move next
     handleNext();
@@ -49,7 +48,7 @@ export default function Dashboard() {
   return (
     <Layout>
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 h-[calc(100vh-8rem)]">
-        
+
         {/* Main Player Area - Cinema Mode */}
         <div className="lg:col-span-3 flex flex-col gap-4">
           <div className="relative flex-1 bg-black rounded-xl overflow-hidden shadow-2xl border border-white/5 group">
@@ -68,7 +67,7 @@ export default function Dashboard() {
                 <p>لا توجد مقاطع في قائمة الانتظار</p>
               </div>
             )}
-            
+
             {/* Overlay Controls */}
             {currentClip && (
               <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/90 to-transparent">
@@ -84,7 +83,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                   </div>
-                  
+
                   <div className="flex gap-3">
                     <Button 
                       size="lg" 
@@ -119,7 +118,7 @@ export default function Dashboard() {
               </span>
             </h3>
           </div>
-          
+
           <ScrollArea className="flex-1">
             <div className="p-2 space-y-2">
               <AnimatePresence>
@@ -160,7 +159,7 @@ export default function Dashboard() {
                   </motion.div>
                 ))}
               </AnimatePresence>
-              
+
               {clips?.length === 0 && (
                 <div className="p-8 text-center text-muted-foreground text-sm">
                   القائمة فارغة! 🎉
@@ -168,7 +167,7 @@ export default function Dashboard() {
               )}
             </div>
           </ScrollArea>
-          
+
           <div className="p-4 border-t border-border/50 bg-background/50">
             <Button variant="outline" className="w-full" onClick={handleNext}>
               <SkipForward className="w-4 h-4 ml-2" /> تخطي المقطع

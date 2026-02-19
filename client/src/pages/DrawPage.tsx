@@ -313,7 +313,7 @@ export default function DrawPage() {
         body: JSON.stringify({ imageData, artistName, artistAvatar }),
       });
       if (res.ok) {
-        const newArtwork = await res.json();
+        await res.json();
         setSubmitted(true);
         // ✅ أضف الرسمة للكاش مباشرةً بدون انتظار refetch
         // هذا يضمن ظهورها فوراً عند الانتقال لصفحة الرسامين

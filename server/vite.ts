@@ -15,9 +15,32 @@ export async function setupVite(server: Server, app: Express) {
     allowedHosts: true as const,
   };
 
+  // Load Replit dev plugins dynamically (only in dev + Replit environment)
+  const replitPlugins: any[] = [];
+  if (process.env.NODE_ENV !== "production" && process.env.REPL_ID !== undefined) {
+    try {
+      const [overlay, cartographer, banner] = await Promise.all([
+        import("@replit/vite-plugin-runtime-error-modal"),
+        import("@replit/vite-plugin-cartographer"),
+        import("@replit/vite-plugin-dev-banner"),
+      ]);
+      replitPlugins.push(
+        overlay.default(),
+        cartographer.cartographer(),
+        banner.devBanner(),
+      );
+    } catch {
+      // Plugins not available, skip
+    }
+  }
+
   const vite = await createViteServer({
     ...viteConfig,
     configFile: false,
+    plugins: [
+      ...(viteConfig.plugins ?? []),
+      ...replitPlugins,
+    ],
     customLogger: {
       ...viteLogger,
       error: (msg, options) => {

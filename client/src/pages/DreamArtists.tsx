@@ -4,7 +4,7 @@ import { Link } from "wouter";
 import { Layout } from "@/components/layout";
 import { useUser } from "@/hooks/use-auth";
 import {
-  Pencil, X, Loader2, Trash2, CheckCircle, XCircle,
+  X, Loader2, Trash2, CheckCircle, XCircle,
   Clock, Star, Palette, Send, MessageSquare
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -274,8 +274,6 @@ function RatingModal({
     const timer = setTimeout(onClose, 2500);
     return () => clearTimeout(timer);
   }, [submitted]);
-
-  const avatarStyle = art.artistName.charCodeAt(0) * 37 % 360;
 
   return (
     <motion.div

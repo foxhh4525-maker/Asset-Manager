@@ -4,7 +4,10 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "wouter";
-import { Loader2, ArrowLeft, Youtube, CheckCircle2, Film, Clock, ArrowRight, Pencil, User, Sparkles } from "lucide-react";
+import {
+  Loader2, ArrowLeft, Youtube, CheckCircle2,
+  Film, Clock, ArrowRight, Pencil, User, Sparkles,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +25,16 @@ function fmtSec(sec: number): string {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
 }
 
+const AVATAR_COLORS = [
+  "#7c3aed","#2563eb","#059669","#d97706",
+  "#dc2626","#db2777","#0891b2","#ea580c",
+];
+function nameToColor(name: string): string {
+  let h = 0;
+  for (const c of name) h = (h << 5) - h + c.charCodeAt(0);
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
+}
+
 const submitSchema = z.object({
   url: z.string().url().regex(
     /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/|kick\.com\/).+$/,
@@ -31,7 +44,7 @@ const submitSchema = z.object({
 });
 
 export default function SubmitPage() {
-  const [, setLocation]   = useLocation();
+  const [, setLocation]         = useLocation();
   const [metadata, setMetadata] = useState<any>(null);
   const [identityOpen, setIdentityOpen] = useState(false);
   const createClip    = useCreateClip();
@@ -39,7 +52,6 @@ export default function SubmitPage() {
   const { data: user } = useUser();
   const { identity, avatarUrl } = useIdentity();
 
-  // يجب أن يكون عنده هوية أو حساب
   const hasIdentity = !!user || !!identity;
 
   const form = useForm({
@@ -77,6 +89,12 @@ export default function SubmitPage() {
 
   const hasTimestamps = metadata && (metadata.startTime > 0 || metadata.endTime > 0);
 
+  /* ─── عرض هوية المستخدم ─── */
+  const identityName   = user ? user.username : identity?.name ?? "";
+  const identityAvatar = user?.avatarUrl || avatarUrl || null;
+  const initial        = identityName[0]?.toUpperCase() ?? "؟";
+  const bgColor        = identityName ? nameToColor(identityName) : "#7c3aed";
+
   return (
     <Layout>
       <div className="max-w-xl mx-auto py-10">
@@ -105,10 +123,14 @@ export default function SubmitPage() {
               /* مسجّل دخول */
               <div className="flex items-center gap-3 p-3.5 rounded-xl border border-white/8 bg-white/2">
                 {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.username} className="w-10 h-10 rounded-full ring-2 ring-primary/30" />
+                  <img src={user.avatarUrl} alt={user.username}
+                    className="w-10 h-10 rounded-full ring-2 ring-primary/30 object-cover" />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
-                    <User className="w-5 h-5 text-primary" />
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm"
+                    style={{ background: nameToColor(user.username) }}
+                  >
+                    {user.username[0]?.toUpperCase()}
                   </div>
                 )}
                 <div>
@@ -118,15 +140,23 @@ export default function SubmitPage() {
                   </p>
                 </div>
               </div>
+
             ) : identity ? (
               /* زائر عنده هوية */
               <button
                 onClick={() => setIdentityOpen(true)}
                 className="w-full flex items-center gap-3 p-3.5 rounded-xl border border-primary/25 bg-primary/5 hover:border-primary/50 hover:bg-primary/8 transition-all group text-right"
               >
-                {avatarUrl && (
-                  <img src={avatarUrl} alt={identity.name}
+                {identityAvatar ? (
+                  <img src={identityAvatar} alt={identity.name}
                     className="w-10 h-10 rounded-full ring-2 ring-primary/30 flex-shrink-0 object-cover" />
+                ) : (
+                  <div
+                    className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0"
+                    style={{ background: bgColor }}
+                  >
+                    {initial}
+                  </div>
                 )}
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{identity.name}</p>
@@ -138,8 +168,9 @@ export default function SubmitPage() {
                   <Pencil className="w-3.5 h-3.5" /> تعديل
                 </div>
               </button>
+
             ) : (
-              /* لا هوية — مطلوب */
+              /* لا هوية */
               <motion.button
                 onClick={() => setIdentityOpen(true)}
                 whileTap={{ scale: 0.98 }}
@@ -159,7 +190,7 @@ export default function SubmitPage() {
             )}
           </div>
 
-          {/* ─── خطوة 2 + 3: الكليب ─── */}
+          {/* ─── خطوة 2: الكليب ─── */}
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-sm text-muted-foreground mb-1">
               <div className="w-5 h-5 rounded-full bg-primary flex items-center justify-center text-[10px] text-white font-bold">2</div>
@@ -168,6 +199,7 @@ export default function SubmitPage() {
 
             <div className="bg-card/50 border border-border/50 rounded-xl p-5 space-y-4">
               <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+
                 {/* URL */}
                 <div className="space-y-1.5">
                   <Label htmlFor="url" className="text-xs text-muted-foreground">رابط الكليب (YouTube أو Kick)</Label>
@@ -196,8 +228,10 @@ export default function SubmitPage() {
 
                 {/* Metadata preview */}
                 {metadata && (
-                  <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-                    className="flex gap-3 p-3 bg-background/40 rounded-xl border border-border/50">
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+                    className="flex gap-3 p-3 bg-background/40 rounded-xl border border-border/50"
+                  >
                     <div className="relative w-32 aspect-video rounded-lg overflow-hidden flex-shrink-0 bg-black">
                       {metadata.thumbnailUrl && (
                         <img src={metadata.thumbnailUrl} alt="Thumbnail" className="w-full h-full object-cover" />
@@ -229,7 +263,10 @@ export default function SubmitPage() {
                 {/* Tag */}
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">تصنيف الكليب</Label>
-                  <Select value={form.watch("tag")} onValueChange={(v) => form.setValue("tag", v, { shouldValidate: true })}>
+                  <Select
+                    value={form.watch("tag")}
+                    onValueChange={(v) => form.setValue("tag", v, { shouldValidate: true })}
+                  >
                     <SelectTrigger className="bg-background/50 border-border/60 h-11">
                       <SelectValue placeholder="اختر تصنيفاً" />
                     </SelectTrigger>

@@ -4,7 +4,7 @@ import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import {
-  Clock, X, ExternalLink, Play, Zap,
+  Clock, X, ExternalLink, Zap,
   Loader2, ShieldCheck, Palette, Globe, ChevronRight,
   Sparkles, Star, TrendingUp,
 } from "lucide-react";

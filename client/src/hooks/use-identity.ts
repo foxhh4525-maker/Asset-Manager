@@ -7,13 +7,13 @@ import { useState, useCallback } from "react";
 
 export interface VisitorIdentity {
   name: string;
-  avatarStyle: string; // dicebear style
-  avatarSeed: string;  // seed للأفاتار
+  avatarStyle: string;
+  avatarSeed: string;
+  customAvatar?: string | null; // base64 صورة مخصصة
 }
 
 const STORAGE_KEY = "scHub_visitor_identity";
 
-// أنماط الأفاتار المتاحة
 export const AVATAR_STYLES = [
   { id: "bottts",      label: "روبوت 🤖" },
   { id: "pixel-art",   label: "بيكسل 🎮" },
@@ -24,6 +24,13 @@ export const AVATAR_STYLES = [
 
 export function buildAvatarUrl(style: string, seed: string): string {
   return `https://api.dicebear.com/8.x/${style}/svg?seed=${encodeURIComponent(seed)}&backgroundColor=1a1a2e`;
+}
+
+/** يرجع الـ URL الفعلي للعرض (صورة مخصصة أو مولّدة) */
+export function getDisplayAvatar(identity: VisitorIdentity | null): string | null {
+  if (!identity) return null;
+  if (identity.customAvatar) return identity.customAvatar;
+  return buildAvatarUrl(identity.avatarStyle, identity.avatarSeed);
 }
 
 export function getStoredIdentity(): VisitorIdentity | null {
@@ -53,5 +60,10 @@ export function useIdentity() {
     setIdentityState(null);
   }, []);
 
-  return { identity, setIdentity, clearIdentity };
+  /** الـ URL الجاهز للعرض مباشرة */
+  const avatarUrl = identity
+    ? (identity.customAvatar || buildAvatarUrl(identity.avatarStyle, identity.avatarSeed))
+    : null;
+
+  return { identity, setIdentity, clearIdentity, avatarUrl };
 }

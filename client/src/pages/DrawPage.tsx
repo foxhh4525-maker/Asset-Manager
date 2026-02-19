@@ -542,7 +542,7 @@ export default function DrawPage() {
                 <label className="text-white/60 text-xs font-medium uppercase tracking-widest block mb-2">الرسام</label>
                 {identity ? (
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => setIdentityOpen(true)}>
-                    <img src={buildAvatarUrl(identity.avatarStyle, identity.avatarSeed)}
+                    <img src={buildAvatarUrl(identity.avatarStyle, identity.avatarSeed) ?? undefined}
                       className="w-10 h-10 rounded-full border-2 border-purple-500/40" alt="avatar" />
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-medium text-sm truncate">{identity.name}</p>

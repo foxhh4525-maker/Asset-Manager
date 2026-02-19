@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, ThumbsUp, ThumbsDown, Clock, Trash2 } from "lucide-react";
+import { Play, ThumbsUp, ThumbsDown, Clock, Trash2, Share2, Check } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
@@ -92,6 +92,23 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [hovered, setHovered]         = useState(false);
   const [userVote, setUserVote]       = useState<1 | -1 | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareUrl = `${window.location.origin}/clips/${clip.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: clip.title, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      }
+    } catch {
+      try { await navigator.clipboard.writeText(shareUrl); setShareCopied(true); setTimeout(() => setShareCopied(false), 2000); } catch {}
+    }
+  };
 
   const tag      = TAG_COLORS[clip.tag];
   const tagLabel = TAG_LABELS[clip.tag] ?? clip.tag;
@@ -232,6 +249,19 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
           <div className="flex items-center gap-1.5 mt-auto pt-0.5">
             <VoteBtn type="up"   count={ups}   active={userVote === 1}  onClick={() => vote(1)}  />
             <VoteBtn type="down" count={downs} active={userVote === -1} onClick={() => vote(-1)} />
+            {/* زر مشاركة OG — Discord / Twitter */}
+            <motion.button
+              whileTap={{ scale: 0.93 }} onClick={handleShare}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border"
+              style={{
+                background: shareCopied ? "rgba(34,197,94,0.1)" : "rgba(255,255,255,0.04)",
+                borderColor: shareCopied ? "rgba(34,197,94,0.35)" : "rgba(255,255,255,0.08)",
+                color: shareCopied ? "#4ade80" : "rgba(255,255,255,0.35)",
+              }}
+              title="نسخ رابط المشاركة (Discord / Twitter)"
+            >
+              {shareCopied ? <Check className="w-3 h-3" /> : <Share2 className="w-3 h-3" />}
+            </motion.button>
             <motion.button
               whileTap={{ scale: 0.93 }} onClick={onPlay}
               className="mr-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border"

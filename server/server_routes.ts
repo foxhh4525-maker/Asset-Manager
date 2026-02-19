@@ -194,6 +194,16 @@ export async function registerRoutes(
     res.json(clips);
   });
 
+  // جلب كليب واحد بـ ID — يستخدم في فتح الكليب من رابط المشاركة
+  // Express 5 لا يدعم inline regex في routes مثل /:id(\d+)
+  app.get("/api/clips/:id", async (req, res) => {
+    const clipId = parseInt(req.params.id);
+    if (isNaN(clipId)) return res.status(400).json({ message: "Invalid ID" });
+    const clip = await storage.getClip(clipId).catch(() => null);
+    if (!clip) return res.status(404).json({ message: "Clip not found" });
+    res.json(clip);
+  });
+
   // ✅ مفتوح للجميع — الزوار يرسلون باسمهم فقط
   app.post(api.clips.create.path, async (req, res) => {
     try {
@@ -464,7 +474,286 @@ export async function registerRoutes(
     } finally { c.release(); }
   });
 
+  // ─────────────────────────────────────────────────────────────
+  //  OG Meta Tags — Discord / Twitter / Telegram link previews
+  //  مثل يوتيوب وكيك: عند مشاركة الرابط يظهر preview مع الفيديو
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * /embed/clip/:id  — صفحة embed بسيطة لـ twitter:player
+   * Discord تستخدمها لتضمين الفيديو مباشرةً داخل الدردشة
+   */
+  app.get("/embed/clip/:id", async (req, res) => {
+    const clipId = parseInt(req.params.id);
+    if (isNaN(clipId)) return res.status(404).send("Not found");
+
+    const clip = await storage.getClip(clipId).catch(() => null);
+    if (!clip) return res.status(404).send("Clip not found");
+
+    const baseUrl = getBaseUrl(req);
+    const embedSrc = buildClipEmbedSrc(clip, baseUrl);
+
+    if (!embedSrc) {
+      // Kick أو كليب بدون embed — أعد توجيه لرابط المنصة الأصلي
+      const directUrl = clip.url?.startsWith("http") ? clip.url : "https://kick.com";
+      return res.redirect(302, directUrl);
+    }
+
+    // صفحة HTML بسيطة تحمل iframe الفيديو — تستخدمها Discord لتشغيل الفيديو inline
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>${escHtml(clip.title)}</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#000;overflow:hidden}
+    iframe{width:100vw;height:100vh;border:0}
+  </style>
+</head>
+<body>
+  <iframe
+    src="${escHtml(embedSrc)}"
+    allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+    allowfullscreen
+    title="${escHtml(clip.title)}"
+  ></iframe>
+</body>
+</html>`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("X-Frame-Options", "ALLOWALL");
+    res.setHeader("Content-Security-Policy", "frame-ancestors *");
+    res.send(html);
+  });
+
+  /**
+   * /clips/:id  — صفحة OG
+   *  - بوتات (Discord, Twitter, Telegram): تحصل على HTML مع OG meta tags كاملة
+   *  - بشر: يحصلون على redirect للتطبيق مع فتح الكليب تلقائياً
+   */
+  app.get("/clips/:id", async (req, res) => {
+    const clipId = parseInt(req.params.id);
+    if (isNaN(clipId)) return res.redirect(302, "/");
+
+    const clip = await storage.getClip(clipId).catch(() => null);
+    if (!clip) return res.redirect(302, "/");
+
+    const ua = (req.headers["user-agent"] || "").toLowerCase();
+    const isBot = isBotUserAgent(ua);
+
+    const baseUrl = getBaseUrl(req);
+    const shareUrl = `${baseUrl}/clips/${clipId}`;
+    const embedPlayerUrl = `${baseUrl}/embed/clip/${clipId}`;
+    const thumbnailUrl = clip.thumbnailUrl || "";
+    const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
+    const embedSrc = buildClipEmbedSrc(clip, baseUrl);
+
+    if (!isBot) {
+      // إعادة توجيه المستخدم للتطبيق مع فتح الكليب تلقائياً
+      return res.redirect(302, `/?clip=${clipId}`);
+    }
+
+    // ─── بناء OG HTML للبوتات ───────────────────────────────
+    const tagEmoji: Record<string, string> = {
+      Funny: "😂 مضحك", Epic: "⚡ ملحمي",
+      Glitch: "🐛 باج", Skill: "🎯 مهارة", Horror: "👻 مرعب",
+    };
+    const tagLabel = tagEmoji[clip.tag] ?? clip.tag ?? "";
+    const description = [
+      clip.channelName ? `📺 ${clip.channelName}` : null,
+      tagLabel ? tagLabel : null,
+      `⏱ ${clip.duration || "0:30"}`,
+      `👤 ${clip.submitterName || "مجتمع"}`,
+    ].filter(Boolean).join("  •  ");
+
+    // meta tags الأساسية
+    let metaTags = `
+  <meta property="og:url" content="${escHtml(shareUrl)}">
+  <meta property="og:title" content="${escHtml(clip.title)}">
+  <meta property="og:description" content="${escHtml(description)}">
+  <meta property="og:site_name" content="Asset Manager — كليبات الجتمع">
+  <meta property="og:type" content="video.other">
+  ${thumbnailUrl ? `
+  <meta property="og:image" content="${escHtml(thumbnailUrl)}">
+  <meta property="og:image:secure_url" content="${escHtml(thumbnailUrl)}">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="720">
+  <meta property="og:image:alt" content="${escHtml(clip.title)}">` : ""}
+`;
+
+    if (embedSrc && !isKick) {
+      // يوتيوب — Discord تستطيع تضمين الفيديو مباشرةً
+      metaTags += `
+  <meta property="og:video" content="${escHtml(embedPlayerUrl)}">
+  <meta property="og:video:secure_url" content="${escHtml(embedPlayerUrl)}">
+  <meta property="og:video:type" content="text/html">
+  <meta property="og:video:width" content="1280">
+  <meta property="og:video:height" content="720">
+  <meta name="twitter:card" content="player">
+  <meta name="twitter:player" content="${escHtml(embedPlayerUrl)}">
+  <meta name="twitter:player:width" content="1280">
+  <meta name="twitter:player:height" content="720">
+`;
+      // إضافة stream URL لو عندنا videoId مباشر
+      if (clip.videoId && !isKick) {
+        const ytStream = `https://www.youtube-nocookie.com/embed/${clip.videoId}?autoplay=1&rel=0${clip.startTime ? `&start=${clip.startTime}` : ""}${clip.endTime ? `&end=${clip.endTime}` : ""}`;
+        metaTags += `  <meta name="twitter:player:stream" content="${escHtml(ytStream)}">\n`;
+        metaTags += `  <meta name="twitter:player:stream:content_type" content="text/html">\n`;
+      }
+    } else {
+      // كيك أو كليبات بدون embed — summary_large_image
+      metaTags += `  <meta name="twitter:card" content="summary_large_image">\n`;
+    }
+
+    metaTags += `
+  <meta name="twitter:title" content="${escHtml(clip.title)}">
+  <meta name="twitter:description" content="${escHtml(description)}">
+  ${thumbnailUrl ? `<meta name="twitter:image" content="${escHtml(thumbnailUrl)}">` : ""}
+  <meta name="twitter:site" content="@AssetManager">
+`;
+
+    const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escHtml(clip.title)} — Asset Manager</title>
+  <meta name="description" content="${escHtml(description)}">
+${metaTags}
+  <!-- إعادة توجيه المتصفح للتطبيق بعد 0 ثانية -->
+  <meta http-equiv="refresh" content="0;url=/?clip=${clipId}">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#09090b;color:#fff;font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:1rem}
+    .card{max-width:520px;width:100%;background:#18181b;border:1px solid #27272a;border-radius:16px;overflow:hidden}
+    .thumb{position:relative;aspect-ratio:16/9;background:#000}
+    .thumb img{width:100%;height:100%;object-fit:cover}
+    .thumb .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.4)}
+    .thumb .play svg{width:64px;height:64px;fill:#fff;filter:drop-shadow(0 0 20px rgba(168,85,247,.8))}
+    .info{padding:1rem 1.25rem}
+    .title{font-size:1rem;font-weight:700;margin-bottom:.5rem;line-height:1.4}
+    .meta{font-size:.75rem;color:#71717a;display:flex;gap:.5rem;flex-wrap:wrap}
+    .badge{background:#7c3aed22;color:#a855f7;border:1px solid #7c3aed55;padding:.15rem .5rem;border-radius:999px;font-size:.7rem;font-weight:600}
+    .cta{display:inline-flex;align-items:center;gap:.5rem;margin-top:1rem;padding:.6rem 1.25rem;background:#7c3aed;color:#fff;border-radius:8px;text-decoration:none;font-size:.85rem;font-weight:600}
+    .redirect{font-size:.7rem;color:#52525b;margin-top:.75rem}
+  </style>
+</head>
+<body>
+  <div class="card">
+    ${thumbnailUrl ? `
+    <div class="thumb">
+      <img src="${escHtml(thumbnailUrl)}" alt="${escHtml(clip.title)}" loading="lazy">
+      <div class="play">
+        <svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+      </div>
+    </div>` : ""}
+    <div class="info">
+      <div class="title">${escHtml(clip.title)}</div>
+      <div class="meta">
+        ${clip.channelName ? `<span>📺 ${escHtml(clip.channelName)}</span>` : ""}
+        ${tagLabel ? `<span class="badge">${escHtml(tagLabel)}</span>` : ""}
+        ${clip.duration ? `<span>⏱ ${escHtml(clip.duration)}</span>` : ""}
+      </div>
+      <a href="/?clip=${clipId}" class="cta">▶ شاهد الكليب</a>
+      <p class="redirect">جاري إعادة التوجيه للتطبيق...</p>
+    </div>
+  </div>
+  <script>window.location.href = '/?clip=${clipId}';</script>
+</body>
+</html>`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.send(html);
+  });
+
+  /**
+   * /api/clips/:id/og  — JSON endpoint لبيانات المشاركة
+   * يستخدمه زر "نسخ رابط المشاركة" في الفرونت
+   */
+  app.get("/api/clips/:id/og", async (req, res) => {
+    const clipId = parseInt(req.params.id);
+    if (isNaN(clipId)) return res.status(404).json({ message: "Not found" });
+    const clip = await storage.getClip(clipId).catch(() => null);
+    if (!clip) return res.status(404).json({ message: "Clip not found" });
+    const baseUrl = getBaseUrl(req);
+    res.json({
+      shareUrl: `${baseUrl}/clips/${clipId}`,
+      embedUrl: `${baseUrl}/embed/clip/${clipId}`,
+      title: clip.title,
+      description: `${clip.channelName || ""} • ${clip.duration || ""}`,
+      thumbnailUrl: clip.thumbnailUrl || "",
+      platform: clip.platform || "youtube",
+    });
+  });
+
   return httpServer;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  OG Helpers
+// ─────────────────────────────────────────────────────────────
+
+/** هل الطلب من بوت (Discord, Twitter, Telegram, WhatsApp...)؟ */
+function isBotUserAgent(ua: string): boolean {
+  const bots = [
+    "discordbot", "twitterbot", "facebookexternalhit", "telegrambot",
+    "whatsapp", "slackbot", "linkedinbot", "pinterestbot", "applebot",
+    "googlebot", "bingbot", "yandexbot", "ia_archiver",
+    "embedly", "outbrain", "quora", "pinterest",
+    "rogerbot", "showyoubot", "sogou", "redditbot",
+    "semrushbot", "ahrefsbot", "msnbot",
+  ];
+  return bots.some(b => ua.includes(b));
+}
+
+/** يبني embed URL للكليب (YouTube فقط، Kick لا يدعم embed) */
+function buildClipEmbedSrc(clip: any, _baseUrl: string): string | null {
+  const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
+  if (isKick) return null;
+
+  // إذا الـ url هو embed مباشرة
+  const url = clip.url || "";
+  if (/youtube(-nocookie)?\.com\/embed\//i.test(url)) {
+    try {
+      const u = new URL(url);
+      u.searchParams.set("autoplay", "1");
+      u.searchParams.set("rel", "0");
+      return u.toString().replace("www.youtube.com/embed", "www.youtube-nocookie.com/embed");
+    } catch { return url; }
+  }
+
+  // كليب YouTube
+  if (/youtube\.com\/clip\//i.test(url) && clip.videoId) {
+    const clipId = url.match(/\/clip\/([A-Za-z0-9_-]+)/)?.[1];
+    if (clipId) {
+      return `https://www.youtube-nocookie.com/embed/${clip.videoId}?clip=${clipId}&autoplay=1&rel=0`;
+    }
+  }
+
+  // videoId عادي
+  if (clip.videoId) {
+    const params = new URLSearchParams({ autoplay: "1", rel: "0", modestbranding: "1" });
+    if (clip.startTime > 0) params.set("start", String(clip.startTime));
+    if (clip.endTime > 0) params.set("end", String(clip.endTime));
+    return `https://www.youtube-nocookie.com/embed/${clip.videoId}?${params}`;
+  }
+
+  return null;
+}
+
+/** يحدد Base URL من الطلب */
+function getBaseUrl(req: any): string {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
+  const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost:5000";
+  return `${proto}://${host}`;
+}
+
+/** يهرب HTML */
+function escHtml(str: string): string {
+  return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
 // ─────────────────────────────────────────────────────────────

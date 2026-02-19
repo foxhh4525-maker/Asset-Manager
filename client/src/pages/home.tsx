@@ -4,7 +4,7 @@ import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import {
-  Clock, X, ExternalLink, Zap,
+  Clock, X, ExternalLink, Zap, Share2, Check,
   Loader2, ShieldCheck, Palette, Globe, ChevronRight,
   Sparkles, Star, TrendingUp,
 } from "lucide-react";
@@ -75,11 +75,29 @@ const TAG_LABELS: Record<string, string> = {
 };
 
 function PlayerModal({ clip, onClose, accentColor, children }: { clip: any; onClose: () => void; accentColor: string; children: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
+
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
+
+  const handleShare = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const shareUrl = `${window.location.origin}/clips/${clip.id}`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: clip.title, url: shareUrl });
+      } else {
+        await navigator.clipboard.writeText(shareUrl);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+    } catch {
+      try { await navigator.clipboard.writeText(shareUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch {}
+    }
+  };
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -111,10 +129,26 @@ function PlayerModal({ clip, onClose, accentColor, children }: { clip: any; onCl
                   {clip.tag && (<><span className="w-1 h-1 rounded-full bg-white/20" /><span style={{ color: accentColor }}>{TAG_LABELS[clip.tag] ?? clip.tag}</span></>)}
                 </div>
               </div>
-              <a href={clip.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
-                className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors">
-                <ExternalLink className="w-3.5 h-3.5" />فتح خارجياً
-              </a>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {/* زر نسخ رابط المشاركة — Discord / Twitter / Telegram */}
+                <button
+                  onClick={handleShare}
+                  className="flex items-center gap-1.5 text-xs transition-all px-2.5 py-1.5 rounded-lg border"
+                  style={{
+                    background: copied ? "rgba(34,197,94,0.15)" : "rgba(168,85,247,0.1)",
+                    borderColor: copied ? "rgba(34,197,94,0.4)" : "rgba(168,85,247,0.3)",
+                    color: copied ? "#4ade80" : "#a855f7",
+                  }}
+                  title="نسخ رابط المشاركة (Discord / Twitter)"
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Share2 className="w-3.5 h-3.5" />}
+                  {copied ? "تم النسخ!" : "مشاركة"}
+                </button>
+                <a href={clip.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                  className="flex-shrink-0 flex items-center gap-1.5 text-xs text-white/30 hover:text-white/60 transition-colors">
+                  <ExternalLink className="w-3.5 h-3.5" />فتح خارجياً
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -503,15 +537,21 @@ function SectionHeader({ section, onBack, sortBy, setSortBy, count }: {
 // ─────────────────────────────────────────────────────────────
 //  محتوى قسم الكليبات (موثقة أو مجتمع)
 // ─────────────────────────────────────────────────────────────
-function ClipsSection({ section, status, isAdmin, sortBy }: {
+function ClipsSection({ section, status, isAdmin, sortBy, initialClip }: {
   section: typeof SECTIONS[number];
   status: "approved" | "pending";
   isAdmin: boolean;
   sortBy: "new" | "top";
+  initialClip?: any;
 }) {
-  const [selectedClip, setSelected] = useState<any>(null);
+  const [selectedClip, setSelected] = useState<any>(initialClip || null);
   const openClip = useCallback((clip: any) => setSelected(clip), []);
   const closeClip = useCallback(() => setSelected(null), []);
+
+  // فتح الكليب المُمرَّر تلقائياً عند التحميل الأول
+  useEffect(() => {
+    if (initialClip) setSelected(initialClip);
+  }, [initialClip]);
 
   const { data: clips, isLoading, error } = useClips({ status, sort: sortBy });
 
@@ -588,8 +628,28 @@ function ArtSection({ section }: { section: typeof SECTIONS[number] }) {
 export default function Home() {
   const [activeSection, setActiveSection] = useState<SectionId | null>(null);
   const [sortBy, setSortBy] = useState<"new" | "top">("new");
+  const [sharedClip, setSharedClip] = useState<any>(null);
   const { data: user } = useUser();
   const isAdmin = user?.role === "admin";
+
+  // ── فتح كليب تلقائياً عند مشاركة رابط /?clip=:id ──────────
+  const { data: approvedClips } = useClips({ status: "approved", sort: "new" });
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const clipId = params.get("clip");
+    if (!clipId) return;
+    window.history.replaceState({}, "", "/");
+    const tryOpen = (clips: any[]) => {
+      const clip = clips.find((c: any) => String(c.id) === clipId);
+      if (clip) { setSharedClip(clip); setActiveSection("verified"); }
+    };
+    if (approvedClips?.length) { tryOpen(approvedClips); return; }
+    fetch(`/api/clips/${clipId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(clip => { if (clip) { setSharedClip(clip); setActiveSection("verified"); } })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [approvedClips]);
 
   const currentSection = SECTIONS.find((s) => s.id === activeSection);
 
@@ -601,6 +661,7 @@ export default function Home() {
 
   const goHome = () => {
     setActiveSection(null);
+    setSharedClip(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -709,7 +770,7 @@ export default function Home() {
             />
 
             {activeSection === "verified" && (
-              <ClipsSection section={currentSection} status="approved" isAdmin={isAdmin} sortBy={sortBy} />
+              <ClipsSection section={currentSection} status="approved" isAdmin={isAdmin} sortBy={sortBy} initialClip={sharedClip} />
             )}
             {activeSection === "art" && (
               <ArtSection section={currentSection} />

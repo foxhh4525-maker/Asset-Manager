@@ -138,7 +138,14 @@ function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) 
         if (!mounted) return;
         if (d.embedUrl) setEmbedUrl(d.embedUrl);
         else if (d.videoId) {
-          setEmbedUrl(`https://kick.com/embed/clip/${encodeURIComponent(d.videoId)}?autoplay=1`);
+          // try several known Kick embed patterns
+          const try1 = `https://kick.com/embed/clip/${encodeURIComponent(d.videoId)}?autoplay=1`;
+          const try2 = `https://clips.kick.com/embed?clip=${encodeURIComponent(d.videoId)}&autoplay=1`;
+          const try3 = `https://clips.kick.com/embed/clip/${encodeURIComponent(d.videoId)}?autoplay=1`;
+          // prefer try3 then try2 then try1
+          setEmbedUrl(try3);
+          // store alternatives on the clip object for potential UI fallback
+          (clip as any)._embedAlternatives = [try3, try2, try1];
         } else {
           setFailed(true);
         }
@@ -187,8 +194,21 @@ function YouTubeClipPlayer({ clip, onClose }: { clip: any; onClose: () => void }
       .then((d) => {
         if (!mounted) return;
         if (d.embedUrl) setEmbedUrl(d.embedUrl);
-        else if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
-        else setFailed(true);
+        else if (d.videoId) {
+          // Ask server if this YouTube video is embeddable (requires server API key)
+          fetch(`/api/youtube/embeddable?videoId=${encodeURIComponent(d.videoId)}&start=${d.startTime||0}&end=${d.endTime||0}`)
+            .then((r) => r.json())
+            .then((yt) => {
+              if (!mounted) return;
+              if (yt.embeddable === true && yt.embedUrl) setEmbedUrl(yt.embedUrl);
+              else if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
+              else setFailed(true);
+            }).catch(() => {
+              if (!mounted) return;
+              if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
+              else setFailed(true);
+            });
+        } else setFailed(true);
       })
       .catch(() => setFailed(true))
       .finally(() => mounted && setLoading(false));

@@ -190,6 +190,14 @@ export async function registerRoutes(
 
   app.get(api.clips.list.path, async (req, res) => {
     const { status, sort } = req.query as { status?: string; sort?: string };
+    // ✅ الكليبات المرفوضة (خزنة الأدمن) — للأدمن فقط
+    if (status === "rejected" && !req.isAuthenticated()) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    if (status === "rejected") {
+      const user = req.user as any;
+      if (user?.role !== "admin") return res.status(403).json({ message: "Forbidden" });
+    }
     const clips = await storage.getClips({ status, sort });
     res.json(clips);
   });

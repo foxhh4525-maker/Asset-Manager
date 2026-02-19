@@ -137,7 +137,7 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
         initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
         whileHover={{ y: -5, scale: 1.01 }} transition={{ duration: 0.2 }}
         onHoverStart={() => setHovered(true)} onHoverEnd={() => setHovered(false)}
-        className="relative flex flex-col bg-[#0d0d10] rounded-2xl overflow-hidden border border-white/5 transition-all duration-300"
+        className="relative flex flex-col bg-[#0d0d10] rounded-2xl overflow-hidden border border-white/5 transition-all duration-300 group"
         style={{
           boxShadow: hovered && tag
             ? `0 20px 50px -15px ${tag.glow}, 0 0 0 1px rgba(255,255,255,0.07)`

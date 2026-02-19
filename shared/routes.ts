@@ -53,7 +53,7 @@ export const api = {
       input: insertClipSchema.extend({
         // نقبل روابط YouTube و Kick — السيرفر يحوّلها تلقائياً قبل الحفظ
         url: z.string().regex(
-          /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/|kick\.com\/).+$/,
+          /^https?:\/\/(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/|kick\.com\/|player\.kick\.com\/).+$/i,
           "Must be a valid YouTube Clip or Kick URL"
         ),
       }),

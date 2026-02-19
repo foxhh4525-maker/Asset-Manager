@@ -35,8 +35,8 @@ function nameToColor(name: string): string {
 }
 
 const submitSchema = z.object({
-  url: z.string().url().regex(
-    /^(https?:\/\/)?(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/|kick\.com\/).+$/,
+  url: z.string().regex(
+    /^https?:\/\/(www\.)?(youtube\.com\/(clip\/|watch\?)|youtu\.be\/|kick\.com\/).+$/i,
     "يجب أن يكون رابط YouTube Clip أو Kick صالحاً"
   ),
   tag: z.string().min(1, "يرجى اختيار تصنيف"),
@@ -74,7 +74,7 @@ export default function SubmitPage() {
 
     const submitterAvatar = user?.avatarUrl || avatarUrl || null;
     await createClip.mutateAsync({
-      url:           metadata.convertedUrl || data.url,
+      url:           data.url,  // ✅ الرابط الأصلي — السيرفر يحوّله تلقائياً
       tag:           data.tag,
       title:         metadata.title,
       thumbnailUrl:  metadata.thumbnailUrl,

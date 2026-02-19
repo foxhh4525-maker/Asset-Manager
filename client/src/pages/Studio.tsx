@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import ReactPlayer from "react-player";
 import { useClips, useUpdateClipStatus } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
@@ -75,8 +75,39 @@ function SmartPlayer({ url, clipId, clip }: { url: string; clipId: number; clip?
   const st = clip?.startTime || 0;
   const en = clip?.endTime   || 0;
   if (/youtube\.com|youtu\.be/i.test(url || "")) {
-    const RP: any = ReactPlayer;
+    // Try server-side embeddability check (if server has YOUTUBE_API_KEY)
+    const [embed, setEmbed] = useState<null | { embeddable: boolean | null; embedUrl?: string }>(null);
+    const videoIdMatch = url.match(/[?&]v=([\w-]{11})/)?.[1] || url.match(/youtu\.be\/([\w-]{11})/)?.[1] || null;
 
+    useEffect(() => {
+      let mounted = true;
+      setEmbed(null);
+      if (!videoIdMatch) return;
+      fetch(`/api/youtube/embeddable?videoId=${encodeURIComponent(videoIdMatch)}&start=${st || 0}&end=${en || 0}`)
+        .then(r => r.json())
+        .then((d) => { if (mounted) setEmbed(d); })
+        .catch(() => { if (mounted) setEmbed({ embeddable: false }); });
+      return () => { mounted = false; };
+    }, [videoIdMatch, st, en, url]);
+
+    // If server explicitly reports embeddable, and provides embedUrl, render iframe for internal playback
+    if (embed && embed.embeddable && embed.embedUrl) {
+      return (
+        <div className="w-full h-full bg-black flex items-center justify-center">
+          <iframe
+            title={`yt-${clipId}`}
+            src={embed.embedUrl}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            className="w-full h-full"
+            style={{ border: 0 }}
+          />
+        </div>
+      );
+    }
+
+    // Fallback to ReactPlayer if embeddable unknown/false
+    const RP: any = ReactPlayer;
     return (
       <RP
         key={`${clipId}-yt`}
@@ -87,7 +118,6 @@ function SmartPlayer({ url, clipId, clip }: { url: string; clipId: number; clip?
         playing={false}
         config={{
           youtube: {
-            // react-player types can be picky; cast here to avoid excess type errors
             playerVars: {
               start: st || 0,
               ...(en > 0 ? { end: en } : {}),

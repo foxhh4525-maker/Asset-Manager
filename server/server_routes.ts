@@ -314,6 +314,44 @@ export async function registerRoutes(
 
   // ─── Artworks (رسامين دريم) ────────────────────────────────
 
+  // ─── YouTube embeddable check (uses server-side API key if provided) ──
+  app.get('/api/youtube/embeddable', async (req, res) => {
+    const videoId = (req.query.videoId as string) || null;
+    const start = parseInt((req.query.start as string) || '0') || 0;
+    const end = parseInt((req.query.end as string) || '0') || 0;
+    if (!videoId) return res.status(400).json({ message: 'videoId required' });
+    const key = process.env.YOUTUBE_API_KEY;
+    if (!key) {
+      // No server key configured, return null to indicate unknown — client should fallback
+      return res.json({ embeddable: null });
+    }
+    try {
+      const u = `https://www.googleapis.com/youtube/v3/videos?part=status&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent(key)}`;
+      const resp = await fetch(u, { signal: AbortSignal.timeout(8000) });
+      if (!resp.ok) return res.json({ embeddable: false });
+      const data = await resp.json() as any;
+      const item = data.items && data.items[0];
+      const embeddable = !!(item && item.status && item.status.embeddable);
+      const embedUrl = embeddable
+        ? (() => {
+            try {
+              const base = `https://www.youtube-nocookie.com/embed/${videoId}`;
+              const params = new URLSearchParams();
+              if (start > 0) params.set('start', String(start));
+              if (end > 0) params.set('end', String(end));
+              params.set('rel', '0');
+              return `${base}${params.toString() ? `?${params.toString()}` : ''}`;
+            } catch { return null; }
+          })()
+        : null;
+      return res.json({ embeddable, embedUrl });
+    } catch (err) {
+      console.warn('[youtube/embeddable] error', err);
+      return res.json({ embeddable: false });
+    }
+  });
+
+
   // GET /api/artworks?status=approved|pending|rejected
   app.get("/api/artworks", async (req, res) => {
     const status = (req.query.status as string) || "approved";

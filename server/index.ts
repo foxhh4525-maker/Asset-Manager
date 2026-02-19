@@ -1,4 +1,12 @@
 import express, { type Request, Response, NextFunction } from "express";
+// Load .env for local development (if present)
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const dotenv = require("dotenv");
+  dotenv.config();
+} catch (e) {
+  // ignore if dotenv not installed in environment
+}
 import { registerRoutes } from "./server_routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";

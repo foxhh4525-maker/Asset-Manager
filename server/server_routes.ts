@@ -303,16 +303,18 @@ export async function registerRoutes(
         ? await fetchKickMetadata(url)
         : await fetchYouTubeMetadata(url);
 
-      // ─── إذا الـ convertedUrl هو embed URL، أرجعه مباشرة ──
-      const isEmbedUrl = /youtube(-nocookie)?\.com\/embed\//i.test(meta.convertedUrl || "");
+      // ─── تحديد embed URL للـ client ──────────────────────────
+      const isYTEmbed  = /youtube(-nocookie)?\.com\/embed\//i.test(meta.convertedUrl || "");
+      const isKickEmbed = /player\.kick\.com/i.test(meta.convertedUrl || "");
 
       res.json({
-        platform:   meta.platform  || "youtube",
-        videoId:    meta.videoId   || null,
-        startTime:  meta.startTime || 0,
-        endTime:    meta.endTime   || 0,
-        embedUrl:   isEmbedUrl ? meta.convertedUrl : null,
-        title:      meta.title     || null,
+        platform:     meta.platform     || "youtube",
+        videoId:      meta.videoId      || null,
+        startTime:    meta.startTime    || 0,
+        endTime:      meta.endTime      || 0,
+        embedUrl:     isYTEmbed  ? meta.convertedUrl : null,
+        kickEmbedUrl: isKickEmbed ? meta.convertedUrl : null,
+        title:        meta.title        || null,
         thumbnailUrl: meta.thumbnailUrl || null,
       });
     } catch {
@@ -838,15 +840,20 @@ async function fetchKickMetadata(clipUrl: string) {
           const thumb   = clip?.thumbnail_url || clip?.thumbnail || clip?.thumb || clip?.clip_thumbnail || "";
           const channel = clip?.channel?.slug || clip?.channel?.username || clip?.streamer?.username || clip?.channel_name || "Kick";
           const dur     = typeof clip?.duration === "number" ? clip.duration : (typeof clip?.duration_seconds === "number" ? clip.duration_seconds : 30);
-          console.log("[Kick] Got metadata:", { title, thumb, channel });
+          // محاولة استخراج UUID لبناء embed URL
+          const uuid = clip?.id || clip?.uuid || clip?.video_id || clip?.video?.id || null;
+          const embedUrl = uuid
+            ? `https://player.kick.com/video/${uuid}`
+            : (clipId ? `https://player.kick.com/video/${clipId}` : clipUrl);
+          console.log("[Kick] Got metadata:", { title, thumb, channel, uuid, embedUrl });
           return {
-            convertedUrl: clipUrl,
+            convertedUrl: embedUrl,   // ✅ نحفظ embed URL مباشرة
             platform:     "kick" as const,
             title,
             thumbnailUrl: thumb,
             channelName:  channel,
             duration:     formatDuration(dur),
-            videoId:      clipId,
+            videoId:      uuid || clipId || "",
             startTime:    0,
             endTime:      0,
           };
@@ -857,10 +864,11 @@ async function fetchKickMetadata(clipUrl: string) {
     }
   }
 
-  // Fallback — البيانات من URL فقط
+  // Fallback — البيانات من URL فقط (نحاول embed بالـ slug)
   console.warn("[Kick] Using fallback metadata for:", clipUrl);
+  const fallbackEmbed = clipId ? `https://player.kick.com/video/${clipId}` : clipUrl;
   return {
-    convertedUrl: clipUrl,
+    convertedUrl: fallbackEmbed,   // نحاول embed URL حتى في الـ fallback
     platform:     "kick" as const,
     title:        clipId ? `Kick Clip — ${clipId}` : "Kick Clip",
     thumbnailUrl: "",

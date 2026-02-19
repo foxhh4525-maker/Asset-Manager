@@ -787,3 +787,37 @@ async function fetchYouTubeMetadata(clipUrl: string) {
     endTime,
   };
 }
+
+/** حاول استخراج Open Graph / Twitter card من أي صفحة */
+async function fetchOpenGraph(targetUrl: string) {
+  try {
+    const resp = await fetch(targetUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) return null;
+    const html = await resp.text();
+
+    const findMeta = (key: string) => {
+      const re = new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i');
+      return html.match(re)?.[1] ?? null;
+    };
+
+    const title = findMeta('og:title') || findMeta('twitter:title') || (html.match(/<title>(.*?)<\/title>/i)?.[1] ?? null);
+    const image = findMeta('og:image') || findMeta('twitter:image') || findMeta('og:image:secure_url') || null;
+    const video = findMeta('og:video:url') || findMeta('og:video') || findMeta('twitter:player') || findMeta('twitter:player:stream') || null;
+
+    // try to infer youtube id from image
+    const vidFromImg = (image || '').match(/vi\/([\w-]{11})\//)?.[1] ?? null;
+
+    return {
+      convertedUrl: video || targetUrl,
+      title: title || null,
+      thumbnailUrl: image || null,
+      videoId: vidFromImg || null,
+      embedUrl: video || null,
+      platform: null,
+      startTime: 0,
+      endTime: 0,
+    };
+  } catch (err) {
+    return null;
+  }
+}

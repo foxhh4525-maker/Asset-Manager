@@ -45,7 +45,9 @@ export function useIdentity() {
   }, []);
 
   /** الـ URL / base64 الجاهز للعرض — أو null إذا لا توجد صورة */
-  const avatarUrl = identity?.customAvatar ?? null;
+  const avatarUrl = identity
+    ? (identity.customAvatar ?? buildAvatarUrl(identity.avatarStyle ?? null, identity.avatarSeed ?? null))
+    : null;
   return { identity, setIdentity, clearIdentity, avatarUrl };
 }
 

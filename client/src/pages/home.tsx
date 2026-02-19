@@ -124,57 +124,21 @@ function PlayerModal({ clip, onClose, accentColor, children }: { clip: any; onCl
 }
 
 function KickGhostPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
-  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let mounted = true;
-    setLoading(true); setFailed(false); setEmbedUrl(null);
-    const url = clip.url || clip.convertedUrl || "";
-    fetch(`/api/resolve-url?url=${encodeURIComponent(url)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!mounted) return;
-        if (d.embedUrl) setEmbedUrl(d.embedUrl);
-        else if (d.videoId) {
-          // try several known Kick embed patterns
-          const try1 = `https://kick.com/embed/clip/${encodeURIComponent(d.videoId)}?autoplay=1`;
-          const try2 = `https://clips.kick.com/embed?clip=${encodeURIComponent(d.videoId)}&autoplay=1`;
-          const try3 = `https://clips.kick.com/embed/clip/${encodeURIComponent(d.videoId)}?autoplay=1`;
-          // prefer try3 then try2 then try1
-          setEmbedUrl(try3);
-          // store alternatives on the clip object for potential UI fallback
-          (clip as any)._embedAlternatives = [try3, try2, try1];
-        } else {
-          setFailed(true);
-        }
-      })
-      .catch(() => setFailed(true))
-      .finally(() => mounted && setLoading(false));
-    return () => { mounted = false; };
-  }, [clip]);
-
-  const fallbackUrl = clip.url?.startsWith("http") ? clip.url : (clip.videoId ? `https://kick.com/clips/${clip.videoId}` : "https://kick.com");
-
+  const clipId = extractKickClipId(clip);
+  const directUrl = clip.url?.startsWith("http") ? clip.url : (clipId ? `https://kick.com/clips/${clipId}` : "https://kick.com");
   return (
     <PlayerModal clip={clip} onClose={onClose} accentColor="#53FC1F">
       <div className="aspect-video w-full relative bg-[#050505] flex items-center justify-center overflow-hidden">
-        {loading && (
-          <div className="flex items-center justify-center h-full w-full">
-            <div className="text-white/60">جاري تحميل الكليب...</div>
+        {clip.thumbnailUrl && (<><img src={clip.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-lg scale-110" /><img src={clip.thumbnailUrl} alt={clip.title} className="relative z-10 h-full w-auto max-w-full object-contain" /></>)}
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5" style={{ background: "rgba(0,0,0,0.55)" }}>
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: "rgba(83,252,31,0.1)", border: "2px solid rgba(83,252,31,0.35)", boxShadow: "0 0 40px rgba(83,252,31,0.25)" }}>
+            <svg viewBox="0 0 32 32" className="w-11 h-11" fill="#53FC1F"><path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z" /></svg>
           </div>
-        )}
-        {!loading && embedUrl && (
-          <iframe src={embedUrl} className="w-full aspect-video border-0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen title={clip.title} />
-        )}
-        {!loading && !embedUrl && (
-          <div className="flex flex-col items-center justify-center gap-4 p-6">
-            {clip.thumbnailUrl && <img src={clip.thumbnailUrl} alt={clip.title} className="max-h-40 rounded-xl opacity-80" />}
-            <p className="text-white/60 text-sm text-center">لا يمكن تشغيل هذا الكليب مباشرةً داخل المنصة.</p>
-            <a href={fallbackUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all"><ExternalLink className="w-4 h-4" />افتح على Kick</a>
-          </div>
-        )}
+          <div className="text-center"><p className="text-white/70 text-sm mb-1">كليبات Kick تُشاهد مباشرةً على المنصة</p><p className="text-white/40 text-xs">اضغط الزر لفتح الكليب في Kick</p></div>
+          <a href={directUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5 font-bold px-8 py-3.5 rounded-xl text-black transition-all" style={{ background: "#53FC1F", boxShadow: "0 0 30px rgba(83,252,31,0.5)" }}>
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-black"><path d="M8 5v14l11-7z" /></svg>شاهد على Kick<ExternalLink className="w-4 h-4 opacity-70" />
+          </a>
+        </div>
       </div>
     </PlayerModal>
   );
@@ -190,29 +154,28 @@ function YouTubeClipPlayer({ clip, onClose }: { clip: any; onClose: () => void }
     setLoading(true); setFailed(false); setEmbedUrl(null);
     const url = clip.url || clip.convertedUrl || "";
     fetch(`/api/resolve-url?url=${encodeURIComponent(url)}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (!mounted) return;
-        if (d.embedUrl) setEmbedUrl(d.embedUrl);
-        else if (d.videoId) {
-          // Ask server if this YouTube video is embeddable (requires server API key)
-          fetch(`/api/youtube/embeddable?videoId=${encodeURIComponent(d.videoId)}&start=${d.startTime||0}&end=${d.endTime||0}`)
-            .then((r) => r.json())
-            .then((yt) => {
-              if (!mounted) return;
-              if (yt.embeddable === true && yt.embedUrl) setEmbedUrl(yt.embedUrl);
-              else if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
-              else setFailed(true);
-            }).catch(() => {
-              if (!mounted) return;
-              if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
-              else setFailed(true);
-            });
-        } else setFailed(true);
-      })
-      .catch(() => setFailed(true))
-      .finally(() => mounted && setLoading(false));
-    return () => { mounted = false; };
+        .then((r) => r.json())
+        .then((d) => {
+          if (!mounted) return;
+          if (d.embedUrl) setEmbedUrl(d.embedUrl);
+          else if (d.videoId) {
+            fetch(`/api/youtube/embeddable?videoId=${encodeURIComponent(d.videoId)}&start=${d.startTime||0}&end=${d.endTime||0}`)
+              .then((r) => r.json())
+              .then((yt) => {
+                if (!mounted) return;
+                if (yt.embeddable === true && yt.embedUrl) setEmbedUrl(yt.embedUrl);
+                else if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
+                else setFailed(true);
+              }).catch(() => {
+                if (!mounted) return;
+                if (d.videoId) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
+                else setFailed(true);
+              });
+          } else setFailed(true);
+        })
+        .catch(() => setFailed(true))
+        .finally(() => mounted && setLoading(false));
+      return () => { mounted = false; };
   }, [clip]);
 
   const directUrl = clip.url?.startsWith("http") ? clip.url : "https://youtube.com";
@@ -220,15 +183,16 @@ function YouTubeClipPlayer({ clip, onClose }: { clip: any; onClose: () => void }
   return (
     <PlayerModal clip={clip} onClose={onClose} accentColor="#ef4444">
       <div className="aspect-video w-full relative bg-[#050505] flex items-center justify-center overflow-hidden">
-        {loading && (<div className="flex items-center justify-center h-full w-full"><div className="text-white/60">جاري تحميل الكليب...</div></div>)}
-        {!loading && embedUrl && (<iframe src={embedUrl} className="w-full aspect-video border-0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen title={clip.title} />)}
-        {!loading && !embedUrl && (
-          <div className="flex flex-col items-center justify-center gap-4 p-6">
-            {clip.thumbnailUrl && <img src={clip.thumbnailUrl} alt={clip.title} className="max-h-40 rounded-xl opacity-80" />}
-            <p className="text-white/60 text-sm text-center">لا يمكن تشغيل هذا الكليب مباشرةً داخل المنصة.</p>
-            <a href={directUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl text-sm font-bold transition-all"><ExternalLink className="w-4 h-4" />افتح على YouTube</a>
+        {clip.thumbnailUrl && (<><img src={clip.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-lg scale-110" /><img src={clip.thumbnailUrl} alt={clip.title} className="relative z-10 h-full w-auto max-w-full object-contain" /></>)}
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-5" style={{ background: "rgba(0,0,0,0.55)" }}>
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: "rgba(239,68,68,0.1)", border: "2px solid rgba(239,68,68,0.35)", boxShadow: "0 0 40px rgba(239,68,68,0.25)" }}>
+            <svg viewBox="0 0 90 63" className="w-11 h-8 fill-red-600"><path d="M88.1 9.9C87 5.7 83.8 2.5 79.7 1.4 72.7 0 45 0 45 0S17.3 0 10.3 1.4C6.2 2.5 3 5.7 1.9 9.9 0 16.4 0 31.5 0 31.5s0 15.1 1.9 21.6c1.1 4.2 4.3 7.4 8.4 8.5C17.3 63 45 63 45 63s27.7 0 34.7-1.4c4.1-1.1 7.3-4.3 8.4-8.5C90 46.6 90 31.5 90 31.5s0-15.1-1.9-21.6z" /><path d="M36 45l23.3-13.5L36 18z" fill="white" /></svg>
           </div>
-        )}
+          <div className="text-center"><p className="text-white/70 text-sm mb-1">كليبات YouTube تُشاهد مباشرةً على المنصة</p><p className="text-white/40 text-xs">اضغط الزر لفتح الكليب في YouTube</p></div>
+          <a href={directUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="flex items-center gap-2.5 font-bold px-8 py-3.5 rounded-xl text-white transition-all" style={{ background: "#dc2626", boxShadow: "0 0 30px rgba(239,68,68,0.5)" }}>
+            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white"><path d="M8 5v14l11-7z" /></svg>شاهد على YouTube<ExternalLink className="w-4 h-4 opacity-70" />
+          </a>
+        </div>
       </div>
     </PlayerModal>
   );

@@ -667,6 +667,40 @@ async function fetchYouTubeMetadata(clipUrl: string) {
       console.warn("[fetchYouTubeMetadata] oEmbed failed:", err);
     }
 
+    // Extra fallback: try fetching the clip page HTML and extract the original video id
+    try {
+      const pageResp = await fetch(clipUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
+      if (pageResp.ok) {
+        const html = await pageResp.text();
+        // Try to find meta property og:video:url or canonical watch?v= link
+        const ogMatch = html.match(/property="og:video:url"\s+content="([^"]+)"/i) || html.match(/property="og:video"\s+content="([^"]+)"/i);
+        const possible = ogMatch?.[1] || html.match(/https?:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})/i)?.[0] || null;
+        if (possible) {
+          // extract v param if present
+          try {
+            const u = new URL(possible.startsWith('http') ? possible : clipUrl);
+            const v = u.searchParams.get('v');
+            if (v && v.length === 11) {
+              const embedUrl = `https://www.youtube-nocookie.com/embed/${v}?clip=${encodeURIComponent(clipUrl.match(/\/clip\/([A-Za-z0-9_-]+)/)?.[1]||'')}&autoplay=1&rel=0`;
+              return {
+                convertedUrl: embedUrl,
+                platform:     "youtube",
+                title:        "Gaming Clip",
+                thumbnailUrl: `https://i.ytimg.com/vi/${v}/hqdefault.jpg`,
+                channelName:  "YouTube Clip",
+                duration:     "0:30",
+                videoId:      v,
+                startTime:    0,
+                endTime:      0,
+              };
+            }
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('[fetchYouTubeMetadata] HTML fallback failed:', err);
+    }
+
     // ─── Fallback: حفظ الرابط الأصلي للكليب ──────────────
     // السيرفر سيحاول مرة أخرى عند العرض
     return {

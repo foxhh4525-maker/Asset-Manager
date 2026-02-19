@@ -752,32 +752,177 @@ function ClipsSection({ section, status, isAdmin, sortBy, initialClip }: {
 }
 
 // ─────────────────────────────────────────────────────────────
-//  قسم الرسم والصور (placeholder جميل)
+//  أفاتار الفنان — يعرض الصورة المخصصة أو حرف ملوّن كاحتياطي
 // ─────────────────────────────────────────────────────────────
-function ArtSection({ section }: { section: typeof SECTIONS[number] }) {
+function ArtistAvatar({ art, size = "sm" }: { art: any; size?: "sm" | "md" }) {
+  const [failed, setFailed] = useState(false);
+  const hue = ((art.artistName?.charCodeAt(0) ?? 65) * 53) % 360;
+  const sizeClass = size === "md"
+    ? "w-10 h-10 rounded-xl text-sm"
+    : "w-7 h-7 rounded-full text-xs";
+
+  if (art.artistAvatar && !failed) {
+    return (
+      <img
+        src={art.artistAvatar}
+        alt={art.artistName}
+        onError={() => setFailed(true)}
+        className={`${sizeClass} flex-shrink-0 object-cover border border-white/10`}
+      />
+    );
+  }
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
-      className="flex flex-col items-center justify-center py-24 gap-6 text-center">
-      <div
-        className="w-24 h-24 rounded-3xl flex items-center justify-center text-4xl"
-        style={{ background: section.accentBg, border: `2px solid ${section.accentBorder}`, boxShadow: `0 0 40px ${section.glow}` }}
-      >
-        {section.emoji}
+    <div
+      className={`${sizeClass} flex-shrink-0 flex items-center justify-center text-white font-black`}
+      style={{ background: `hsl(${hue},60%,40%)` }}
+    >
+      {art.artistName?.[0] ?? "؟"}
+    </div>
+  );
+}
+
+// بطاقة العمل الفني
+function ArtworkCard({ art, onClick }: { art: any; onClick: () => void }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      whileHover={{ y: -4 }}
+      onClick={onClick}
+      className="group cursor-pointer rounded-2xl overflow-hidden border border-white/6 bg-[#0d0d12]
+        hover:border-cyan-500/40 hover:shadow-[0_0_24px_rgba(6,182,212,0.15)] transition-all duration-300"
+    >
+      <div className="aspect-[4/3] overflow-hidden bg-[#111] relative">
+        <img
+          src={art.imageData}
+          alt={art.artistName}
+          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+        {/* gradient on hover */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+        {/* zoom icon */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="w-10 h-10 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+            <span className="text-white text-lg">🔍</span>
+          </div>
+        </div>
       </div>
-      <div className="space-y-2">
-        <h2 className="text-2xl font-bold text-white/80">قريباً...</h2>
-        <p className="text-muted-foreground max-w-sm leading-relaxed">
-          قسم الأعمال الفنية والرسومات قيد الإعداد. سيتيح للأعضاء مشاركة إبداعاتهم البصرية مع المجتمع.
-        </p>
-      </div>
-      <div
-        className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium"
-        style={{ background: section.accentBg, color: section.accent, border: `1px solid ${section.accentBorder}` }}
-      >
-        <Sparkles className="w-4 h-4" />
-        جاري العمل عليه
+      <div className="p-3 flex items-center gap-2">
+        <ArtistAvatar art={art} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-white/80 truncate">{art.artistName}</p>
+          <p className="text-[10px] text-white/30">
+            {new Date(art.createdAt).toLocaleDateString("ar-EG", { month: "short", day: "numeric" })}
+          </p>
+        </div>
       </div>
     </motion.div>
+  );
+}
+
+// نافذة عرض العمل الفني بالكامل
+function ArtworkModal({ art, onClose }: { art: any; onClose: () => void }) {
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/95 backdrop-blur-lg"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.85, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.85, opacity: 0 }}
+        transition={{ type: "spring", damping: 22, stiffness: 260 }}
+        className="relative max-w-2xl w-full"
+        onClick={e => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          className="absolute -top-10 right-0 text-white/50 hover:text-white text-sm flex items-center gap-1.5 transition-colors"
+        >
+          <X className="w-4 h-4" /> إغلاق <kbd className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 font-mono">ESC</kbd>
+        </button>
+        <div className="rounded-2xl overflow-hidden border border-white/10 bg-[#0a0a12]"
+          style={{ boxShadow: "0 0 80px rgba(6,182,212,0.2), 0 0 0 1px rgba(255,255,255,0.06)" }}>
+          <img src={art.imageData} alt={art.artistName} className="w-full object-contain max-h-[65vh] bg-[#111]" />
+          <div className="p-4 flex items-center gap-3 border-t border-white/6">
+            <ArtistAvatar art={art} size="md" />
+            <div>
+              <p className="font-bold text-white">{art.artistName}</p>
+              <p className="text-xs text-white/40">
+                {new Date(art.createdAt).toLocaleDateString("ar-EG", { year: "numeric", month: "long", day: "numeric" })}
+              </p>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+//  قسم الرسم والصور — معرض حقيقي
+// ─────────────────────────────────────────────────────────────
+function ArtSection({ section }: { section: typeof SECTIONS[number] }) {
+  const [artworks, setArtworks]   = useState<any[]>([]);
+  const [loading,  setLoading]    = useState(true);
+  const [selected, setSelected]   = useState<any>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch("/api/artworks?status=approved")
+      .then(r => r.json())
+      .then(d => setArtworks(Array.isArray(d) ? d : []))
+      .catch(() => setArtworks([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  return (
+    <>
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {[...Array(10)].map((_, i) => (
+            <div key={i} className="aspect-[4/3] rounded-2xl bg-white/5 animate-pulse" />
+          ))}
+        </div>
+      ) : artworks.length === 0 ? (
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          className="flex flex-col items-center justify-center py-24 gap-6 text-center">
+          <div className="w-24 h-24 rounded-3xl flex items-center justify-center text-4xl"
+            style={{ background: section.accentBg, border: `2px solid ${section.accentBorder}`, boxShadow: `0 0 40px ${section.glow}` }}>
+            🎨
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-bold text-white/70">لا توجد رسومات بعد</h2>
+            <p className="text-sm text-muted-foreground max-w-xs">كن أول من يشارك إبداعه مع المجتمع!</p>
+          </div>
+          <a href="/draw"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all"
+            style={{ background: section.accentBg, color: section.accent, border: `1.5px solid ${section.accentBorder}` }}>
+            <Sparkles className="w-4 h-4" /> ارسم الآن
+          </a>
+        </motion.div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {artworks.map((art: any, i: number) => (
+            <motion.div key={art.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: Math.min(i * 0.04, 0.4) }}>
+              <ArtworkCard art={art} onClick={() => setSelected(art)} />
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      <AnimatePresence>
+        {selected && <ArtworkModal art={selected} onClose={() => setSelected(null)} />}
+      </AnimatePresence>
+    </>
   );
 }
 

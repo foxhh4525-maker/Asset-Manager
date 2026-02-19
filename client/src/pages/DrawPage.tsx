@@ -302,9 +302,11 @@ export default function DrawPage() {
     const canvas = canvasRef.current!;
     const imageData = canvas.toDataURL("image/jpeg", 0.85);
     const artistName   = user ? user.username : (identity?.name ?? "زائر");
+    // customAvatar = base64 صورة مرفوعة من المستخدم (تُحفظ في localStorage)
+    // buildAvatarUrl = dicebear fallback إذا لا توجد صورة مخصصة
     const artistAvatar = user
       ? (user.avatarUrl || null)
-      : (identity ? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed) : null);
+      : (identity ? (identity.customAvatar ?? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed)) : null);
     setSubmitting(true);
     try {
       const res = await fetch("/api/artworks", {
@@ -542,8 +544,8 @@ export default function DrawPage() {
                 <label className="text-white/60 text-xs font-medium uppercase tracking-widest block mb-2">الرسام</label>
                 {identity ? (
                   <div className="flex items-center gap-3 cursor-pointer" onClick={() => setIdentityOpen(true)}>
-                    <img src={buildAvatarUrl(identity.avatarStyle, identity.avatarSeed) ?? undefined}
-                      className="w-10 h-10 rounded-full border-2 border-purple-500/40" alt="avatar" />
+                    <img src={(identity.customAvatar ?? buildAvatarUrl(identity.avatarStyle, identity.avatarSeed)) ?? undefined}
+                      className="w-10 h-10 rounded-full border-2 border-purple-500/40 object-cover" alt="avatar" />
                     <div className="flex-1 min-w-0">
                       <p className="text-white font-medium text-sm truncate">{identity.name}</p>
                       <p className="text-purple-400 text-xs flex items-center gap-1">

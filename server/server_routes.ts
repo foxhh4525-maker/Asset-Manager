@@ -294,7 +294,71 @@ export async function registerRoutes(
     }
   });
 
-  // ✅ يحوّل أي رابط (YouTube أو Kick) إلى videoId + timestamps + platform
+  // ✅ جلب رابط تشغيل حديث (live) لكليب محدد — حل مشكلة انتهاء صلاحية clipt
+  app.get("/api/clips/:id/fresh-player", async (req, res) => {
+    const clipId = parseInt(req.params.id);
+    if (isNaN(clipId)) return res.status(400).json({ message: "invalid id" });
+    try {
+      const clip = await storage.getClip(clipId);
+      if (!clip) return res.status(404).json({ message: "not found" });
+
+      const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
+
+      // ─── Kick: جلب mp4 مباشر من API ──────────────────────
+      if (isKick) {
+        // إذا كان videoId يحتوي على mp4 مخزّن مسبقاً
+        const isDirect = (u: string) => /\.(mp4|webm|m3u8)(\?|$)/i.test(u)
+          || /clips\.(kick|twitch)\.tv/i.test(u)
+          || /media\.kick\.com/i.test(u)
+          || /d2nvs31859zcd8\.cloudfront\.net/i.test(u);
+
+        if (clip.videoId && isDirect(clip.videoId)) {
+          return res.json({ type: "direct", url: clip.videoId, thumbnailUrl: clip.thumbnailUrl });
+        }
+        // حاول جلب بيانات جديدة من Kick API
+        try {
+          const meta = await fetchKickMetadata(clip.url);
+          if (meta.videoId && isDirect(meta.videoId)) {
+            return res.json({ type: "direct", url: meta.videoId, thumbnailUrl: meta.thumbnailUrl || clip.thumbnailUrl });
+          }
+        } catch {}
+        // Fallback: أرسل الرابط الأصلي مع thumbnail للمشاهدة الخارجية
+        return res.json({ type: "external", url: clip.url, thumbnailUrl: clip.thumbnailUrl });
+      }
+
+      // ─── YouTube: جلب oEmbed حديث لتجديد clipt ───────────
+      const isYTClip = /youtube\.com\/clip\//i.test(clip.url || "");
+      if (isYTClip) {
+        try {
+          const meta = await fetchYouTubeMetadata(clip.url);
+          if (meta.convertedUrl && /youtube\.com\/embed\//i.test(meta.convertedUrl)) {
+            return res.json({ type: "iframe", url: meta.convertedUrl });
+          }
+        } catch {}
+      }
+
+      // كليب يوتيوب عادي — استخدم videoId المخزّن
+      if (clip.videoId) {
+        const params = new URLSearchParams({
+          autoplay: "1", rel: "0", modestbranding: "1",
+        });
+        if (clip.startTime) params.set("start", String(clip.startTime));
+        if (clip.endTime)   params.set("end",   String(clip.endTime));
+        return res.json({
+          type: "iframe",
+          url: `https://www.youtube-nocookie.com/embed/${clip.videoId}?${params}`,
+        });
+      }
+
+      // Fallback
+      return res.json({ type: "external", url: clip.url, thumbnailUrl: clip.thumbnailUrl });
+    } catch (err) {
+      console.error("[fresh-player]", err);
+      return res.status(500).json({ message: "server error" });
+    }
+  });
+
+
   app.get("/api/resolve-url", async (req, res) => {
     const url = req.query.url as string;
     if (!url) return res.status(400).json({ message: "url required" });

@@ -114,15 +114,20 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
   const tagLabel = TAG_LABELS[clip.tag] ?? clip.tag;
   const name     = clip.submitterName || clip.submitter?.username || "زائر";
 
-  // Optimistic vote counts
-  const ups   = (clip.upvotes   || 0) + (userVote === 1  ? 1 : 0);
-  const downs = (clip.downvotes || 0) + (userVote === -1 ? 1 : 0);
+  // Optimistic vote counts — صحيح: لا نضيف إذا لم يصوّت بعد
+  const baseUps   = clip.upvotes   || 0;
+  const baseDowns = clip.downvotes || 0;
+  // إضافة التصويت المتفائل: +1 للاختيار الجديد فقط (مع خصم القديم إذا تبدّل)
+  const ups   = baseUps   + (userVote === 1  ? 1 : 0);
+  const downs = baseDowns + (userVote === -1 ? 1 : 0);
   const total = ups + downs;
   const ratio = total > 0 ? (ups / total) * 100 : 50;
 
   const vote = (v: 1 | -1) => {
-    if (userVote === v) return;
-    setUserVote(v);
+    // ✅ الضغط على نفس الزر = إلغاء التصويت (toggle)
+    const next = userVote === v ? null : v;
+    setUserVote(next);
+    // السيرفر يحذف التصويت تلقائياً إذا أرسلنا نفس القيمة مرة ثانية
     voteMutation.mutate({ id: clip.id, value: v });
   };
 

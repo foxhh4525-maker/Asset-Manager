@@ -242,112 +242,164 @@ function PlayerLoading({ clip }: { clip: any }) {
 function PlayerFailed({ clip, platform }: { clip: any; platform: "youtube" | "kick" | string }) {
   const isKick = platform === "kick";
   const directUrl = clip.url?.startsWith("http") ? clip.url : (isKick ? "https://kick.com" : "https://youtube.com");
-  const accentColor = isKick ? "#53FC1F" : "#dc2626";
-  const accentShadow = isKick ? "rgba(83,252,31,0.5)" : "rgba(239,68,68,0.5)";
+  const accentColor = isKick ? "#53FC1F" : "#ff0000";
+  const accentShadow = isKick ? "rgba(83,252,31,0.6)" : "rgba(255,0,0,0.5)";
+
   return (
-    <div className="relative aspect-video w-full overflow-hidden bg-[#050505]">
-      {/* خلفية ضبابية */}
-      {clip.thumbnailUrl && (
-        <img src={clip.thumbnailUrl} alt="" className="absolute inset-0 w-full h-full object-cover opacity-15 blur-xl scale-110" />
+    <div className="relative aspect-video w-full overflow-hidden bg-[#050505] group cursor-pointer">
+      {/* ── Thumbnail كاملة كخلفية ── */}
+      {clip.thumbnailUrl ? (
+        <img
+          src={clip.thumbnailUrl}
+          alt={clip.title}
+          className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-gradient-to-br from-gray-900 to-black" />
       )}
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-5" style={{ background: "rgba(0,0,0,0.7)" }}>
-        {/* أيقونة المنصة */}
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center"
-          style={{ background: `${accentColor}15`, border: `2px solid ${accentColor}50`, boxShadow: `0 0 30px ${accentColor}25` }}>
+
+      {/* gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/10" />
+
+      {/* ── زر تشغيل ضخم في المنتصف ── */}
+      <a
+        href={directUrl}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="absolute inset-0 flex flex-col items-center justify-center gap-4"
+      >
+        {/* دائرة الزر */}
+        <div
+          className="w-20 h-20 rounded-full flex items-center justify-center transition-all duration-300 group-hover:scale-110"
+          style={{
+            background: accentColor,
+            boxShadow: `0 0 0 8px ${accentColor}30, 0 0 50px ${accentShadow}`,
+          }}
+        >
+          {/* أيقونة المنصة بدل السهم */}
           {isKick ? (
-            <svg viewBox="0 0 32 32" className="w-9 h-9" fill={accentColor}><path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z" /></svg>
+            <svg viewBox="0 0 32 32" className="w-10 h-10" fill="#000">
+              <path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z" />
+            </svg>
           ) : (
-            <svg viewBox="0 0 90 63" className="w-10 h-7" fill={accentColor}>
-              <path d="M88.1 9.9C87 5.7 83.8 2.5 79.7 1.4 72.7 0 45 0 45 0S17.3 0 10.3 1.4C6.2 2.5 3 5.7 1.9 9.9 0 16.4 0 31.5 0 31.5s0 15.1 1.9 21.6c1.1 4.2 4.3 7.4 8.4 8.5C17.3 63 45 63 45 63s27.7 0 34.7-1.4c4.1-1.1 7.3-4.3 8.4-8.5C90 46.6 90 31.5 90 31.5s0-15.1-1.9-21.6z"/>
-              <path d="M36 45l23.3-13.5L36 18z" fill="white"/>
+            <svg viewBox="0 0 24 24" className="w-10 h-10 ml-1" fill="white">
+              <path d="M8 5v14l11-7z"/>
             </svg>
           )}
         </div>
-        <div className="text-center px-4">
-          <p className="text-white/70 text-sm mb-1">
-            {isKick ? "تعذّر تحميل كليب Kick — سيتم فتحه خارجياً" : "تعذّر تضمين الفيديو — سيتم فتحه على YouTube"}
+
+        {/* نص */}
+        <div className="text-center">
+          <p className="text-white font-bold text-base drop-shadow-lg">
+            شاهد على {isKick ? "Kick" : "YouTube"}
           </p>
-          <p className="text-white/35 text-xs">اضغط الزر للمشاهدة على المنصة الأصلية</p>
+          <p className="text-white/60 text-xs mt-0.5">يفتح في تبويب جديد</p>
         </div>
-        <a href={directUrl} target="_blank" rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="flex items-center gap-2.5 font-bold px-7 py-3 rounded-xl transition-all"
-          style={{ background: accentColor, color: isKick ? "#000" : "#fff", boxShadow: `0 0 25px ${accentShadow}` }}
-        >
-          <svg viewBox="0 0 24 24" className="w-5 h-5" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-          شاهد على {isKick ? "Kick" : "YouTube"}
-          <ExternalLink className="w-4 h-4 opacity-70" />
-        </a>
+      </a>
+
+      {/* ── شارة المنصة في الزاوية ── */}
+      <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold"
+        style={{ background: `${accentColor}20`, border: `1.5px solid ${accentColor}60`, color: accentColor }}>
+        {isKick ? (
+          <svg viewBox="0 0 32 32" className="w-3.5 h-3.5" fill={accentColor}>
+            <path d="M4 4h6v10l8-10h8L16 16l10 12h-8L10 18v10H4V4z" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 90 63" className="w-4 h-3" fill={accentColor}>
+            <path d="M88.1 9.9C87 5.7 83.8 2.5 79.7 1.4 72.7 0 45 0 45 0S17.3 0 10.3 1.4C6.2 2.5 3 5.7 1.9 9.9 0 16.4 0 31.5 0 31.5s0 15.1 1.9 21.6c1.1 4.2 4.3 7.4 8.4 8.5C17.3 63 45 63 45 63s27.7 0 34.7-1.4c4.1-1.1 7.3-4.3 8.4-8.5C90 46.6 90 31.5 90 31.5s0-15.1-1.9-21.6z"/>
+            <path d="M36 45l23.3-13.5L36 18z" fill="white"/>
+          </svg>
+        )}
+        {isKick ? "Kick" : "YouTube"}
+      </div>
+
+      {/* ── تنبيه صغير في الأسفل ── */}
+      <div className="absolute bottom-3 inset-x-3 flex items-center justify-center">
+        <span className="text-white/40 text-[10px] flex items-center gap-1">
+          <ExternalLink className="w-2.5 h-2.5" />
+          {isKick
+            ? "Kick لا يسمح بالتضمين — سيُفتح على المنصة"
+            : "هذا المقطع محمي — سيُفتح على YouTube"}
+        </span>
       </div>
     </div>
   );
 }
 
-/** المشغّل الموحّد — يعرض iframe أو HTML5 video أو fallback */
+/** المشغّل الموحّد — يجلب رابط تشغيل حديث دائماً من السيرفر */
 function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
   const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
   const accentColor = isKick ? "#53FC1F" : "rgba(168,85,247,0.9)";
 
-  // محاولة فورية من البيانات المخزّنة (بدون API)
-  const [embedUrl, setEmbedUrl] = useState<string | null>(() => getStoredEmbedUrl(clip));
-  const [loading, setLoading] = useState(false);
+  const [playerType, setPlayerType] = useState<"iframe" | "direct" | "external" | null>(null);
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
-  // هل هو رابط mp4 مباشر؟ (Kick CDN)
-  const isDirect = !!embedUrl && isDirectVideoUrl(embedUrl);
-
   useEffect(() => {
-    // إذا عندنا embed URL — لا نحتاج API
-    if (embedUrl) return;
-
-    // fallback: اطلب من الـ API لكل من YouTube وKick
     setLoading(true);
-    const url = clip.url || "";
-    fetch(`/api/resolve-url?url=${encodeURIComponent(url)}`)
-      .then(r => r.json())
+    setFailed(false);
+    // ✅ دائماً اجلب رابط تشغيل حديث من السيرفر (يحلّ مشكلة clipt المنتهي الصلاحية)
+    fetch(`/api/clips/${clip.id}/fresh-player`)
+      .then(r => r.ok ? r.json() : Promise.reject())
       .then(d => {
-        // ✅ تحقق من direct mp4 أولاً
-        const directUrl = d.directVideoUrl || d.clipUrl;
-        if (directUrl && isDirectVideoUrl(directUrl)) { setEmbedUrl(directUrl); return; }
-        if (d.embedUrl) setEmbedUrl(d.embedUrl);
-        else if (d.kickEmbedUrl) setEmbedUrl(d.kickEmbedUrl);
-        else if (d.videoId && !isKick) setEmbedUrl(buildEmbedUrl(d.videoId, d.startTime || 0, d.endTime || 0));
-        else setFailed(true);
+        if (d.type === "direct" && d.url) {
+          setPlayerType("direct");
+          setEmbedUrl(d.url);
+        } else if (d.type === "iframe" && d.url) {
+          setPlayerType("iframe");
+          setEmbedUrl(d.url);
+        } else if (d.type === "external") {
+          setPlayerType("external");
+          setEmbedUrl(d.url || clip.url);
+        } else {
+          setFailed(true);
+        }
       })
-      .catch(() => setFailed(true))
+      .catch(() => {
+        // fallback محلي
+        const stored = getStoredEmbedUrl(clip);
+        if (stored) {
+          setPlayerType(isDirectVideoUrl(stored) ? "direct" : "iframe");
+          setEmbedUrl(stored);
+        } else {
+          setFailed(true);
+        }
+      })
       .finally(() => setLoading(false));
   }, [clip.id]);
 
-  const canEmbed = !!embedUrl && !failed;
+  const canPlay = !!embedUrl && !failed && playerType !== "external";
+  const isExternal = playerType === "external" || (failed && !embedUrl);
 
   return (
     <PlayerModal clip={clip} onClose={onClose} accentColor={accentColor}>
       {/* ── جاري التحميل ─────────────────────────────── */}
-      {loading && !embedUrl && <PlayerLoading clip={clip} />}
+      {loading && <PlayerLoading clip={clip} />}
 
-      {/* ── HTML5 video مباشر (Kick mp4) ────────────── */}
-      {canEmbed && isDirect && (
+      {/* ── HTML5 video مباشر (Kick mp4 CDN) ────────── */}
+      {!loading && canPlay && playerType === "direct" && (
         <div className="relative w-full aspect-video bg-black">
           <video
-            key={embedUrl}
-            src={embedUrl}
+            key={embedUrl!}
+            src={embedUrl!}
             className="w-full h-full block"
             controls
             autoPlay
             playsInline
-            style={{ display: "block" }}
           >
-            <source src={embedUrl} type="video/mp4" />
+            <source src={embedUrl!} type="video/mp4" />
           </video>
         </div>
       )}
 
-      {/* ── iframe للمشاهدة المباشرة (YouTube + Kick player) ── */}
-      {canEmbed && !isDirect && (
+      {/* ── iframe (YouTube embed كامل) ──────────────── */}
+      {!loading && canPlay && playerType === "iframe" && (
         <div className="relative w-full aspect-video bg-black">
           <iframe
-            key={embedUrl}
-            src={embedUrl}
+            key={embedUrl!}
+            src={embedUrl!}
             className="w-full h-full border-0 block absolute inset-0"
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write"
             allowFullScreen
@@ -357,8 +409,8 @@ function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void })
         </div>
       )}
 
-      {/* ── fallback عند الفشل ────────────────────────── */}
-      {!loading && (failed || (!embedUrl && !loading)) && (
+      {/* ── fallback: مشاهدة خارجية (Kick أو يوتيوب محمي) ── */}
+      {!loading && (isExternal || failed) && (
         <PlayerFailed clip={clip} platform={isKick ? "kick" : "youtube"} />
       )}
     </PlayerModal>

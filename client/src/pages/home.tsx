@@ -6,7 +6,7 @@ import { useUser } from "@/hooks/use-auth";
 import {
   Clock, X, ExternalLink, Zap, Share2, Check,
   Loader2, ShieldCheck, Palette, Globe, ChevronRight,
-  Sparkles, Star, TrendingUp, Lock,
+  Sparkles, Star, TrendingUp,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -445,7 +445,7 @@ function SkeletonCard() {
 // ─────────────────────────────────────────────────────────────
 //  تعريف الأقسام
 // ─────────────────────────────────────────────────────────────
-type SectionId = "verified" | "art" | "community" | "admin_vault";
+type SectionId = "verified" | "art" | "community";
 
 const SECTIONS = [
   {
@@ -462,7 +462,6 @@ const SECTIONS = [
     gradient: "linear-gradient(135deg, rgba(168,85,247,0.18) 0%, rgba(168,85,247,0.04) 100%)",
     badge: "موثّق",
     badgeColor: "#a855f7",
-    adminOnly: false,
   },
   {
     id: "art" as SectionId,
@@ -478,7 +477,6 @@ const SECTIONS = [
     gradient: "linear-gradient(135deg, rgba(6,182,212,0.18) 0%, rgba(6,182,212,0.04) 100%)",
     badge: "إبداع",
     badgeColor: "#06b6d4",
-    adminOnly: false,
   },
   {
     id: "community" as SectionId,
@@ -494,23 +492,6 @@ const SECTIONS = [
     gradient: "linear-gradient(135deg, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.04) 100%)",
     badge: "مجتمع",
     badgeColor: "#f59e0b",
-    adminOnly: false,
-  },
-  {
-    id: "admin_vault" as SectionId,
-    icon: Lock,
-    emoji: "🔐",
-    title: "خزنة الأدمن",
-    subtitle: "مقاطع خاصة — مرئية للأدمن فقط",
-    description: "كليبات أُرجئت أو محفوظة بشكل خاص — لا يراها سوى الأدمن",
-    accent: "#ef4444",
-    accentBg: "rgba(239,68,68,0.12)",
-    accentBorder: "rgba(239,68,68,0.3)",
-    glow: "rgba(239,68,68,0.4)",
-    gradient: "linear-gradient(135deg, rgba(239,68,68,0.18) 0%, rgba(239,68,68,0.04) 100%)",
-    badge: "🔐 سري",
-    badgeColor: "#ef4444",
-    adminOnly: true,  // ← يظهر فقط للأدمن
   },
 ] as const;
 
@@ -901,9 +882,9 @@ export default function Home() {
               </motion.p>
             </div>
 
-            {/* بطاقات الأقسام — الأدمن يرى خزنته الخاصة أيضاً */}
-            <div className={`grid gap-5 mb-16 ${isAdmin ? "grid-cols-1 md:grid-cols-2 lg:grid-cols-4" : "grid-cols-1 md:grid-cols-3"}`}>
-              {SECTIONS.filter(s => !s.adminOnly || isAdmin).map((section, i) => (
+            {/* بطاقات الأقسام الثلاثة */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-16">
+              {SECTIONS.map((section, i) => (
                 <SectionCard
                   key={section.id}
                   section={section}
@@ -955,9 +936,6 @@ export default function Home() {
             )}
             {activeSection === "community" && (
               <ClipsSection section={currentSection} status="pending" isAdmin={isAdmin} sortBy={sortBy} />
-            )}
-            {activeSection === "admin_vault" && isAdmin && (
-              <ClipsSection section={currentSection} status="rejected" isAdmin={isAdmin} sortBy={sortBy} />
             )}
           </motion.div>
         )}

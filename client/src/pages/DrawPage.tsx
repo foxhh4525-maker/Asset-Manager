@@ -483,9 +483,16 @@ export default function DrawPage() {
                   className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center">
                   <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }}
                     transition={{ type: "spring", damping: 15 }} className="text-center">
-                    <CheckCircle2 className="w-20 h-20 text-green-400 mx-auto mb-4" />
+                    <div className="relative mb-4">
+                      <CheckCircle2 className="w-20 h-20 text-green-400 mx-auto" />
+                      <div className="absolute -top-1 -right-1 w-7 h-7 bg-amber-500 rounded-full flex items-center justify-center text-xs">⏳</div>
+                    </div>
                     <h2 className="text-2xl font-bold text-white mb-2">تم إرسال رسمتك! 🎉</h2>
-                    <p className="text-white/60">ستظهر في المعرض بعد موافقة الأدمن</p>
+                    <div className="flex items-center gap-2 justify-center mb-2 px-4 py-2 bg-amber-500/15 border border-amber-400/30 rounded-xl">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
+                      <p className="text-amber-300 text-sm font-semibold">رسمتك قيد المراجعة الآن</p>
+                    </div>
+                    <p className="text-white/50 text-sm">ستظهر في المعرض بعد موافقة الأدمن ✨</p>
                   </motion.div>
                 </motion.div>
               )}

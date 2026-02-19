@@ -334,15 +334,15 @@ export async function registerRoutes(
         return res.json({ type: "external", url: clip.url, thumbnailUrl: clip.thumbnailUrl });
       }
 
-      // ─── YouTube: جلب oEmbed حديث لتجديد clipt ───────────
+      // ─── YouTube Clips (youtube.com/clip/) — محجوبة من embed ──
+      // YouTube يرفض تشغيلها في iframe خارجي → أرجع external فوراً
       const isYTClip = /youtube\.com\/clip\//i.test(clip.url || "");
       if (isYTClip) {
-        try {
-          const meta = await fetchYouTubeMetadata(clip.url);
-          if (meta.convertedUrl && /youtube\.com\/embed\//i.test(meta.convertedUrl)) {
-            return res.json({ type: "iframe", url: meta.convertedUrl });
-          }
-        } catch {}
+        return res.json({
+          type: "external",
+          url: clip.url,
+          thumbnailUrl: clip.thumbnailUrl,
+        });
       }
 
       // كليب يوتيوب عادي — استخدم videoId المخزّن

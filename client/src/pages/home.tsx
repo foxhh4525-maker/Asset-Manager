@@ -327,6 +327,42 @@ function PlayerFailed({ clip, platform }: { clip: any; platform: "youtube" | "ki
   );
 }
 
+/** iframe مع اكتشاف الحجب التلقائي */
+function IframePlayer({ src, title, onFail }: { src: string; title: string; onFail: () => void }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    // إذا لم يُحمَّل خلال 7 ثواني → اعتبره محجوباً
+    const timer = setTimeout(() => {
+      try {
+        // محاولة قراءة contentDocument — إذا فشلت فهو يعمل (CORS = محتوى خارجي عادي)
+        // إذا نجحت وكان الـ body فارغاً → محجوب
+        const doc = ref.current?.contentDocument;
+        if (doc && (!doc.body || doc.body.innerHTML.trim() === "")) {
+          onFail();
+        }
+      } catch {
+        // CORS error = iframe loaded external content normally
+      }
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [src, onFail]);
+
+  return (
+    <div className="relative w-full aspect-video bg-black">
+      <iframe
+        ref={ref}
+        src={src}
+        className="w-full h-full border-0 block absolute inset-0"
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write"
+        allowFullScreen
+        title={title}
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </div>
+  );
+}
+
 /** المشغّل الموحّد — يجلب رابط تشغيل حديث دائماً من السيرفر */
 function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void }) {
   const isKick = clip.platform === "kick" || /kick\.com/i.test(clip.url || "");
@@ -395,18 +431,13 @@ function SmartVideoPlayer({ clip, onClose }: { clip: any; onClose: () => void })
       )}
 
       {/* ── iframe (YouTube embed كامل) ──────────────── */}
-      {!loading && canPlay && playerType === "iframe" && (
-        <div className="relative w-full aspect-video bg-black">
-          <iframe
-            key={embedUrl!}
-            src={embedUrl!}
-            className="w-full h-full border-0 block absolute inset-0"
-            allow="autoplay; encrypted-media; picture-in-picture; fullscreen; clipboard-write"
-            allowFullScreen
-            title={clip.title}
-            referrerPolicy="no-referrer-when-downgrade"
-          />
-        </div>
+      {!loading && canPlay && playerType === "iframe" && !failed && (
+        <IframePlayer
+          key={embedUrl!}
+          src={embedUrl!}
+          title={clip.title}
+          onFail={() => setFailed(true)}
+        />
       )}
 
       {/* ── fallback: مشاهدة خارجية (Kick أو يوتيوب محمي) ── */}

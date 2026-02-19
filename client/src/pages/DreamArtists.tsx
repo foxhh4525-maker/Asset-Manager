@@ -460,6 +460,14 @@ function ArtCard({ art, onOpen, onRate, isAdmin, onAction }: {
           </div>
         </div>
 
+        {/* ⏳ شارة "قيد المراجعة" — مرئية للجميع */}
+        {art.status === "pending" && (
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/20 border border-amber-400/50 backdrop-blur-sm">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-amber-300 text-[11px] font-bold tracking-wide">قيد المراجعة</span>
+          </div>
+        )}
+
         {/* Admin buttons */}
         {isAdmin && onAction && (
           <div
@@ -595,7 +603,9 @@ export default function DreamArtists() {
   const action = useArtworkAction();
 
   const statusQuery = isAdmin ? tab : "approved";
+  // زوار يرون فقط approved، لكن يظهر لهم رسائل إذا كان هناك رسمات قيد المراجعة
   const { data: artworks = [], isLoading } = useArtworks(statusQuery);
+  const { data: pendingMine = [] } = useArtworks("pending");  // لإظهار إشعار للزائر
 
   const handleAction = useCallback((id: number, act: "approved" | "rejected" | "delete") => {
     action.mutate({ id, action: act });

@@ -667,38 +667,67 @@ async function fetchYouTubeMetadata(clipUrl: string) {
       console.warn("[fetchYouTubeMetadata] oEmbed failed:", err);
     }
 
-    // Extra fallback: try fetching the clip page HTML and extract the original video id
+    // Extra fallback: fetch the clip page HTML and extract Open Graph / meta tags
     try {
       const pageResp = await fetch(clipUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(8000) });
       if (pageResp.ok) {
         const html = await pageResp.text();
-        // Try to find meta property og:video:url or canonical watch?v= link
-        const ogMatch = html.match(/property="og:video:url"\s+content="([^"]+)"/i) || html.match(/property="og:video"\s+content="([^"]+)"/i);
-        const possible = ogMatch?.[1] || html.match(/https?:\/\/www\.youtube\.com\/watch\?v=([\w-]{11})/i)?.[0] || null;
-        if (possible) {
-          // extract v param if present
+
+        // helper to read meta tag by property or name
+        const findMeta = (key: string) => {
+          const re = new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]*content=["']([^"']+)["'][^>]*>`, 'i');
+          return html.match(re)?.[1] ?? null;
+        };
+
+        const ogTitle = findMeta('og:title') || findMeta('twitter:title');
+        const ogImage = findMeta('og:image') || findMeta('twitter:image') || findMeta('og:image:secure_url');
+        const ogVideo = findMeta('og:video:url') || findMeta('og:video') || findMeta('twitter:player') || findMeta('twitter:player:stream');
+
+        // If we found an embed/video URL via OG tags, prefer it
+        if (ogVideo) {
           try {
-            const u = new URL(possible.startsWith('http') ? possible : clipUrl);
-            const v = u.searchParams.get('v');
-            if (v && v.length === 11) {
-              const embedUrl = `https://www.youtube-nocookie.com/embed/${v}?clip=${encodeURIComponent(clipUrl.match(/\/clip\/([A-Za-z0-9_-]+)/)?.[1]||'')}&autoplay=1&rel=0`;
-              return {
-                convertedUrl: embedUrl,
-                platform:     "youtube",
-                title:        "Gaming Clip",
-                thumbnailUrl: `https://i.ytimg.com/vi/${v}/hqdefault.jpg`,
-                channelName:  "YouTube Clip",
-                duration:     "0:30",
-                videoId:      v,
-                startTime:    0,
-                endTime:      0,
-              };
-            }
-          } catch {}
+            const u = new URL(ogVideo, clipUrl);
+            const embedUrl = u.toString().replace('www.youtube.com/embed', 'www.youtube-nocookie.com/embed');
+            return {
+              convertedUrl: embedUrl,
+              platform:     'youtube',
+              title:        ogTitle || 'Gaming Clip',
+              thumbnailUrl: ogImage || '',
+              channelName:  'YouTube Clip',
+              duration:     '0:30',
+              videoId:      extractVideoId(ogVideo) || clipId || '',
+              startTime:    0,
+              endTime:      0,
+            };
+          } catch (e) {
+            /* ignore */
+          }
+        }
+
+        // If OG image or title present, use them and try to derive videoId
+        if (ogTitle || ogImage) {
+          // try to infer videoId from og:image (i.ytimg.com/vi/VIDEOID/...) or from clipUrl
+          const imgMatch = (ogImage || '').match(/vi\/([\w-]{11})\//);
+          const vFromImg = imgMatch?.[1] ?? null;
+          const inferredVid = vFromImg || clipId || extractVideoId(clipUrl) || null;
+          if (inferredVid) {
+            const embedUrl = `https://www.youtube-nocookie.com/embed/${inferredVid}?clip=${encodeURIComponent(clipId)}&autoplay=1&rel=0`;
+            return {
+              convertedUrl: embedUrl,
+              platform:     'youtube',
+              title:        ogTitle || 'Gaming Clip',
+              thumbnailUrl: ogImage || `https://i.ytimg.com/vi/${inferredVid}/hqdefault.jpg`,
+              channelName:  'YouTube Clip',
+              duration:     '0:30',
+              videoId:      inferredVid,
+              startTime:    0,
+              endTime:      0,
+            };
+          }
         }
       }
     } catch (err) {
-      console.warn('[fetchYouTubeMetadata] HTML fallback failed:', err);
+      console.warn('[fetchYouTubeMetadata] HTML/OG fallback failed:', err);
     }
 
     // ─── Fallback: حفظ الرابط الأصلي للكليب ──────────────

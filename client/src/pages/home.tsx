@@ -1,10 +1,10 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Layout } from "@/components/layout";
 import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";
 import { useUser } from "@/hooks/use-auth";
 import {
-  Flame, Clock, X, ExternalLink, Play, Zap,
+  Clock, X, ExternalLink, Play, Zap,
   Loader2, ShieldCheck, Palette, Globe, ChevronRight,
   Sparkles, Star, TrendingUp,
 } from "lucide-react";

@@ -1,9 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Play, ThumbsUp, ThumbsDown, Clock, Trash2 } from "lucide-react";
+import { Play, ThumbsUp, ThumbsDown, Clock, Trash2, Eye } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -20,14 +19,22 @@ const TAG_LABELS: Record<string, string> = {
 };
 
 const TAG_COLORS: Record<string, string> = {
-  Funny:  "bg-yellow-500/20 text-yellow-300 border-yellow-500/30",
-  Epic:   "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  Glitch: "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  Skill:  "bg-green-500/20 text-green-300 border-green-500/30",
-  Horror: "bg-red-500/20 text-red-300 border-red-500/30",
+  Funny:  "bg-yellow-500/15 text-yellow-300 border-yellow-500/30",
+  Epic:   "bg-blue-500/15 text-blue-300 border-blue-500/30",
+  Glitch: "bg-orange-500/15 text-orange-300 border-orange-500/30",
+  Skill:  "bg-green-500/15 text-green-300 border-green-500/30",
+  Horror: "bg-red-500/15 text-red-300 border-red-500/30",
 };
 
-// ── توليد أفاتار من الاسم — fallback فقط ─────────────────
+const TAG_GLOW: Record<string, string> = {
+  Funny:  "rgba(234,179,8,0.3)",
+  Epic:   "rgba(59,130,246,0.3)",
+  Glitch: "rgba(249,115,22,0.3)",
+  Skill:  "rgba(34,197,94,0.3)",
+  Horror: "rgba(239,68,68,0.3)",
+};
+
+// ── توليد أفاتار من الاسم ─────────────────────────────────────
 const AVATAR_COLORS = [
   "#7c3aed","#2563eb","#059669","#d97706","#dc2626","#db2777","#0891b2",
 ];
@@ -46,8 +53,6 @@ interface ClipCardProps {
   isAdmin?: boolean;
 }
 
-// ── مكوّن الأفاتار — يعرض الصورة الحقيقية أو يرجع للحرف ──
-// failedUrls: cache دائم لتجنب تكرار محاولة تحميل صور فاشلة
 const failedAvatarUrls = new Set<string>();
 
 function SubmitterAvatar({ clip }: { clip: any }) {
@@ -57,7 +62,6 @@ function SubmitterAvatar({ clip }: { clip: any }) {
   const avatarLetter = nameInitial(displayName);
   const [failed, setFailed] = useState(() => !!avatarSrc && failedAvatarUrls.has(avatarSrc));
 
-  // ✅ إذا تغير الـ avatarSrc نعيد المحاولة
   const handleError = () => {
     if (avatarSrc) failedAvatarUrls.add(avatarSrc);
     setFailed(true);
@@ -69,14 +73,14 @@ function SubmitterAvatar({ clip }: { clip: any }) {
         src={avatarSrc}
         alt={displayName}
         onError={handleError}
-        className="w-7 h-7 rounded-full flex-shrink-0 ring-2 ring-primary/30 object-cover bg-background"
+        className="w-6 h-6 rounded-full flex-shrink-0 ring-2 ring-primary/20 object-cover"
       />
     );
   }
 
   return (
     <div
-      className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 ring-2 ring-white/10"
+      className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 ring-1 ring-white/10"
       style={{ backgroundColor: avatarColor }}
     >
       {avatarLetter}
@@ -88,119 +92,181 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
   const voteMutation   = useVoteClip();
   const deleteMutation = useDeleteClip();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const displayName = clip.submitterName || clip.submitter?.username || "زائر";
   const tagLabel    = TAG_LABELS[clip.tag] ?? clip.tag;
-  const tagColor    = TAG_COLORS[clip.tag] ?? "bg-primary/20 text-primary border-primary/30";
+  const tagColor    = TAG_COLORS[clip.tag] ?? "bg-primary/15 text-primary border-primary/30";
+  const tagGlow     = TAG_GLOW[clip.tag] ?? "rgba(168,85,247,0.3)";
+
+  const totalVotes = (clip.upvotes || 0) + (clip.downvotes || 0);
+  const voteRatio  = totalVotes > 0 ? ((clip.upvotes || 0) / totalVotes) * 100 : 50;
 
   return (
     <>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        whileHover={{ y: -4 }}
-        transition={{ duration: 0.25 }}
-        className="group relative bg-card rounded-xl overflow-hidden border border-border/50 shadow-lg hover:shadow-[0_0_20px_rgba(168,85,247,0.15)] hover:border-primary/50 transition-all"
+        whileHover={{ y: -6, scale: 1.01 }}
+        transition={{ duration: 0.2 }}
+        onHoverStart={() => setIsHovered(true)}
+        onHoverEnd={() => setIsHovered(false)}
+        className="group relative bg-[#0d0d10] rounded-2xl overflow-hidden border border-white/5 shadow-lg transition-all duration-300"
+        style={{
+          boxShadow: isHovered
+            ? `0 20px 60px -15px ${tagGlow}, 0 0 0 1px rgba(255,255,255,0.08)`
+            : "0 4px 20px -5px rgba(0,0,0,0.5)",
+        }}
       >
-        {/* زر الحذف - للأدمن فقط */}
+        {/* زر الحذف */}
         {isAdmin && (
           <button
             onClick={(e) => { e.stopPropagation(); setConfirmOpen(true); }}
-            className="absolute top-2 left-2 z-20 bg-red-600/90 hover:bg-red-600 text-white p-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute top-3 left-3 z-20 bg-red-600/80 hover:bg-red-600 backdrop-blur text-white p-1.5 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-200"
           >
-            <Trash2 className="w-4 h-4" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
 
         {/* Thumbnail */}
-        <div className="relative aspect-video bg-black/50 overflow-hidden cursor-pointer" onClick={onPlay}>
+        <div
+          className="relative aspect-video bg-black/60 overflow-hidden cursor-pointer"
+          onClick={onPlay}
+        >
           {clip.thumbnailUrl ? (
-            <img
-              src={clip.thumbnailUrl}
-              alt={clip.title}
-              className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-            />
+            <>
+              <img
+                src={clip.thumbnailUrl}
+                alt={clip.title}
+                className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
+              />
+              {/* تدرج فوق الصورة */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+            </>
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-muted/20">
               <Play className="w-10 h-10 text-muted-foreground/40" />
             </div>
           )}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
 
-          {/* زر Play */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="w-14 h-14 rounded-full bg-primary/90 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.5)]">
-              <Play className="w-6 h-6 text-white ml-1" fill="currentColor" />
+          {/* زر Play - دائرة كبيرة في المنتصف */}
+          <motion.div
+            initial={false}
+            animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1 : 0.8 }}
+            transition={{ duration: 0.2 }}
+            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          >
+            <div
+              className="w-16 h-16 rounded-full flex items-center justify-center shadow-2xl backdrop-blur-sm"
+              style={{
+                background: "rgba(168,85,247,0.85)",
+                boxShadow: `0 0 40px rgba(168,85,247,0.6), 0 0 80px rgba(168,85,247,0.3)`,
+              }}
+            >
+              <Play className="w-7 h-7 text-white ml-1" fill="currentColor" />
             </div>
-          </div>
+          </motion.div>
 
           {/* مدة الكليب */}
-          <div className="absolute bottom-2 right-2 bg-black/80 px-2 py-0.5 rounded text-xs font-mono border border-white/10">
-            {clip.duration}
-          </div>
+          {clip.duration && (
+            <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-sm px-2 py-0.5 rounded-md text-xs font-mono text-white/80 border border-white/10">
+              {clip.duration}
+            </div>
+          )}
 
-          {/* تصنيف الكليب فوق الصورة */}
+          {/* تصنيف الكليب */}
           {clip.tag && (
-            <div className="absolute top-2 right-2">
-              <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border backdrop-blur-sm ${tagColor}`}>
+            <div className="absolute top-2.5 right-2.5">
+              <span className={`text-[10px] font-bold px-2 py-1 rounded-full border backdrop-blur-sm ${tagColor}`}>
                 {tagLabel}
               </span>
             </div>
           )}
+
+          {/* مؤشر "اضغط لتشغيل" خط سفلي */}
+          <motion.div
+            className="absolute bottom-0 left-0 right-0 h-0.5"
+            style={{ background: `linear-gradient(to right, transparent, ${tagGlow.replace("0.3", "0.8")}, transparent)` }}
+            animate={{ opacity: isHovered ? 1 : 0 }}
+            transition={{ duration: 0.3 }}
+          />
         </div>
 
         {/* معلومات الكليب */}
         <div className="p-4 space-y-3">
-          <h3 className="font-display font-semibold text-base leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+          {/* العنوان */}
+          <h3
+            className="font-semibold text-sm leading-snug line-clamp-2 cursor-pointer transition-colors"
+            style={{ color: isHovered ? "hsl(var(--primary))" : "hsl(var(--foreground))" }}
+            onClick={onPlay}
+          >
             {clip.title}
           </h3>
 
-          {/* ✅ المرسِل — يعرض الأفاتار الحقيقي */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          {/* المرسِل والوقت */}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <SubmitterAvatar clip={clip} />
-            <span className="truncate font-medium text-foreground/80">{displayName}</span>
-            <span className="text-muted-foreground/40 mx-0.5">•</span>
-            <Clock className="w-3 h-3 flex-shrink-0" />
-            <span className="text-xs">
+            <span className="truncate font-medium text-foreground/70 max-w-[120px]">{displayName}</span>
+            <span className="text-muted-foreground/30">•</span>
+            <Clock className="w-3 h-3 flex-shrink-0 text-muted-foreground/60" />
+            <span className="text-muted-foreground/60 flex-shrink-0">
               {clip.createdAt
                 ? formatDistanceToNow(new Date(clip.createdAt), { addSuffix: true })
                 : "للتو"}
             </span>
           </div>
 
+          {/* شريط التصويت */}
+          {totalVotes > 0 && (
+            <div className="h-0.5 rounded-full bg-white/5 overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-500"
+                style={{
+                  width: `${voteRatio}%`,
+                  background: voteRatio > 60
+                    ? "linear-gradient(to right, #22c55e, #86efac)"
+                    : voteRatio < 40
+                    ? "linear-gradient(to right, #ef4444, #fca5a5)"
+                    : "linear-gradient(to right, #a855f7, #c084fc)",
+                }}
+              />
+            </div>
+          )}
+
           {/* أزرار التصويت */}
-          <div className="flex items-center justify-between border-t border-border/40 pt-2 mt-1">
+          <div className="flex items-center justify-between pt-1">
             <div className="flex items-center gap-1">
-              <Button
-                variant="ghost" size="sm"
-                className="h-8 px-2 hover:bg-primary/10 hover:text-primary"
-                onClick={() => voteMutation.mutate({ id: clip.id, value: 1 })}
+              <button
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:bg-green-500/10 hover:text-green-400 text-muted-foreground group/up"
+                onClick={(e) => { e.stopPropagation(); voteMutation.mutate({ id: clip.id, value: 1 }); }}
               >
-                <ThumbsUp className="w-3.5 h-3.5 mr-1" />
-                <span className="font-mono text-xs">{clip.upvotes}</span>
-              </Button>
-              <Button
-                variant="ghost" size="sm"
-                className="h-8 px-2 hover:bg-destructive/10 hover:text-destructive"
-                onClick={() => voteMutation.mutate({ id: clip.id, value: -1 })}
+                <ThumbsUp className="w-3.5 h-3.5 group-hover/up:scale-110 transition-transform" />
+                <span className="font-mono">{clip.upvotes || 0}</span>
+              </button>
+              <button
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:bg-red-500/10 hover:text-red-400 text-muted-foreground group/down"
+                onClick={(e) => { e.stopPropagation(); voteMutation.mutate({ id: clip.id, value: -1 }); }}
               >
-                <ThumbsDown className="w-3.5 h-3.5 mr-1" />
-                <span className="font-mono text-xs">{clip.downvotes}</span>
-              </Button>
+                <ThumbsDown className="w-3.5 h-3.5 group-hover/down:scale-110 transition-transform" />
+                <span className="font-mono">{clip.downvotes || 0}</span>
+              </button>
             </div>
 
-            {clip.tag && (
-              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${tagColor}`}>
-                {tagLabel}
-              </span>
-            )}
+            {/* زر مشاهدة صغير */}
+            <button
+              onClick={onPlay}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 hover:bg-primary/20 text-primary transition-all duration-200 border border-primary/20 hover:border-primary/40"
+            >
+              <Play className="w-3 h-3" fill="currentColor" />
+              شاهد
+            </button>
           </div>
         </div>
       </motion.div>
 
       {/* نافذة تأكيد الحذف */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent className="bg-card border-border/50">
           <AlertDialogHeader>
             <AlertDialogTitle>تأكيد حذف المقطع</AlertDialogTitle>
             <AlertDialogDescription>

@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
+import { sfx } from "@/App";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";
@@ -316,6 +317,7 @@ export default function DrawPage() {
       });
       if (res.ok) {
         await res.json();
+        sfx.submit();
         setSubmitted(true);
         // ✅ أضف الرسمة للكاش مباشرةً بدون انتظار refetch
         // هذا يضمن ظهورها فوراً عند الانتقال لصفحة الرسامين
@@ -328,7 +330,7 @@ export default function DrawPage() {
         );
         // ✅ invalidate لضمان جلب أحدث البيانات عند mount الصفحة
         queryClient.invalidateQueries({ queryKey: ["/api/artworks"] });
-        setTimeout(() => setLocation("/dream-artists"), 2000);
+        setTimeout(() => setLocation("/dream-artists"), 5000);
       }
     } catch {}
     setSubmitting(false);
@@ -480,19 +482,46 @@ export default function DrawPage() {
             <AnimatePresence>
               {submitted && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                  className="absolute inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center">
-                  <motion.div initial={{ scale: 0.5 }} animate={{ scale: 1 }}
-                    transition={{ type: "spring", damping: 15 }} className="text-center">
-                    <div className="relative mb-4">
-                      <CheckCircle2 className="w-20 h-20 text-green-400 mx-auto" />
-                      <div className="absolute -top-1 -right-1 w-7 h-7 bg-amber-500 rounded-full flex items-center justify-center text-xs">⏳</div>
+                  className="absolute inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center">
+                  <motion.div initial={{ scale: 0.5, y: 30 }} animate={{ scale: 1, y: 0 }}
+                    transition={{ type: "spring", damping: 15 }} className="text-center px-8 max-w-xs">
+
+                    {/* Animated checkmark */}
+                    <div className="relative inline-flex mb-5">
+                      {[1, 2].map(i => (
+                        <motion.div key={i} className="absolute inset-0 rounded-full border border-green-400/30"
+                          initial={{ scale: 0.5, opacity: 1 }}
+                          animate={{ scale: 2 + i, opacity: 0 }}
+                          transition={{ duration: 1.5, delay: i * 0.3, repeat: Infinity, ease: "easeOut" }}
+                        />
+                      ))}
+                      <div className="relative w-20 h-20 rounded-full flex items-center justify-center"
+                        style={{ background: "rgba(34,197,94,0.15)", border: "2px solid rgba(34,197,94,0.4)" }}>
+                        <CheckCircle2 className="w-11 h-11 text-green-400" />
+                      </div>
                     </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">تم إرسال رسمتك! 🎉</h2>
-                    <div className="flex items-center gap-2 justify-center mb-2 px-4 py-2 bg-amber-500/15 border border-amber-400/30 rounded-xl">
-                      <span className="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse flex-shrink-0"></span>
-                      <p className="text-amber-300 text-sm font-semibold">رسمتك قيد المراجعة الآن</p>
+
+                    <h2 className="text-2xl font-bold text-white mb-3">تم إرسال رسمتك! 🎨</h2>
+
+                    {/* Status */}
+                    <div className="flex items-center gap-2 justify-center mb-3 px-4 py-2.5 bg-amber-500/10 border border-amber-400/25 rounded-2xl">
+                      <motion.span className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0"
+                        animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1, repeat: Infinity }} />
+                      <p className="text-amber-300 text-sm font-bold">مشاركتك حاليًا في مجتمع الاقتراحات</p>
                     </div>
-                    <p className="text-white/50 text-sm">ستظهر في المعرض بعد موافقة الأدمن ✨</p>
+
+                    <p className="text-white/40 text-xs leading-relaxed mb-4">
+                      ستظهر رسمتك في معرض الرسامين بعد مراجعة الأدمن ✨
+                    </p>
+
+                    {/* Progress bar */}
+                    <div className="h-0.5 bg-white/5 rounded-full overflow-hidden">
+                      <motion.div className="h-full rounded-full"
+                        style={{ background: "linear-gradient(to right, #7c3aed, #ec4899)" }}
+                        initial={{ width: "0%" }} animate={{ width: "100%" }}
+                        transition={{ duration: 5, ease: "linear" }} />
+                    </div>
+                    <p className="text-white/20 text-[11px] mt-1.5">سيتم التحويل تلقائياً...</p>
                   </motion.div>
                 </motion.div>
               )}

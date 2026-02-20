@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { sfx } from "@/App";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, ThumbsUp, ThumbsDown, Clock, Trash2, Share2, Check, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
@@ -90,6 +91,7 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
   const ratio = (ups + downs) > 0 ? (ups / (ups + downs)) * 100 : 50;
 
   const vote = (v: 1|-1) => {
+    sfx.click();
     setUserVote(userVote === v ? null : v);
     voteMutation.mutate({ id: clip.id, value: v });
   };
@@ -114,7 +116,7 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
         )}
 
         {/* ── Thumbnail ── */}
-        <div className="relative cursor-pointer overflow-hidden" style={{ aspectRatio: "16/9" }} onClick={onPlay}>
+        <div className="relative cursor-pointer overflow-hidden" style={{ aspectRatio: "16/9" }} onClick={() => { sfx.open(); onPlay?.(); }}>
 
           {hasThumbnail ? (
             <img src={clip.thumbnailUrl} alt={clip.title} onError={() => setImgError(true)}
@@ -189,7 +191,7 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
         <div className="flex flex-col flex-1 p-3.5 gap-2">
 
           <h3 className="text-sm font-semibold leading-snug line-clamp-2 cursor-pointer transition-colors duration-200"
-            style={{ color: hovered ? "hsl(var(--primary))" : "rgba(255,255,255,0.9)" }} onClick={onPlay}>
+            style={{ color: hovered ? "hsl(var(--primary))" : "rgba(255,255,255,0.9)" }} onClick={() => { sfx.open(); onPlay?.(); }}>
             {clip.title}
           </h3>
 
@@ -230,7 +232,7 @@ export function ClipCard({ clip, onPlay, isAdmin = false }: ClipCardProps) {
               <ExternalLink className="w-3 h-3" />
             </a>
 
-            <motion.button whileTap={{ scale: 0.93 }} onClick={onPlay}
+            <motion.button whileTap={{ scale: 0.93 }} onClick={() => { sfx.open(); onPlay?.(); }}
               className="mr-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all border"
               style={{
                 background: "rgba(168,85,247,0.12)", borderColor: "rgba(168,85,247,0.3)",

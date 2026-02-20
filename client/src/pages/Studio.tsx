@@ -245,11 +245,18 @@ export default function Studio() {
     } catch (err) { console.error(err); }
   };
 
+  // Auth check handled by AdminRoute in App.tsx
+  // Keep minimal check here as safety net
   if (isAuthLoading) return (
-    <Layout><div className="flex h-[60vh] items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div></Layout>
+    <Layout>
+      <div className="flex h-[60vh] items-center justify-center flex-col gap-4">
+        <div className="w-10 h-10 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
+        <p className="text-white/30 text-sm">جاري التحقق...</p>
+      </div>
+    </Layout>
   );
 
-  if (!user || (user as any).role !== "admin") return (
+  if (user && (user as any).role !== "admin") return (
     <Layout>
       <div className="max-w-md mx-auto mt-20 text-center">
         <ShieldAlert className="w-16 h-16 text-destructive mx-auto mb-4" />

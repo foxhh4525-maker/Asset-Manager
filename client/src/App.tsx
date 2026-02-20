@@ -3,7 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Loader2, Gamepad2 } from "lucide-react";
+import { Loader2, Gamepad2, Zap } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import SubmitPage from "@/pages/submit";
@@ -14,49 +14,236 @@ import DrawPage from "@/pages/DrawPage";
 import DreamArtists from "@/pages/DreamArtists";
 import { useUser } from "@/hooks/use-auth";
 import { useIdentity } from "@/hooks/use-identity";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+// ─── Sound System ─────────────────────────────────────────────
+class SoundEngine {
+  private ctx: AudioContext | null = null;
+
+  private getCtx(): AudioContext {
+    if (!this.ctx) this.ctx = new AudioContext();
+    if (this.ctx.state === "suspended") this.ctx.resume();
+    return this.ctx;
+  }
+
+  private playTone(freq: number, type: OscillatorType, duration: number, vol = 0.3, delay = 0) {
+    try {
+      const ctx  = this.getCtx();
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type      = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+      gain.gain.setValueAtTime(0, ctx.currentTime + delay);
+      gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + delay + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + duration);
+    } catch {}
+  }
+
+  // 🎵 أصوات الموقع
+  click()   { this.playTone(440, "sine", 0.08, 0.15); }
+  hover()   { this.playTone(660, "sine", 0.06, 0.07); }
+  success() {
+    this.playTone(523, "sine", 0.12, 0.25, 0);
+    this.playTone(659, "sine", 0.12, 0.25, 0.12);
+    this.playTone(784, "sine", 0.18, 0.25, 0.24);
+  }
+  error()   {
+    this.playTone(300, "sawtooth", 0.15, 0.2, 0);
+    this.playTone(220, "sawtooth", 0.15, 0.2, 0.12);
+  }
+  submit()  {
+    this.playTone(440, "sine", 0.1, 0.2, 0);
+    this.playTone(550, "sine", 0.1, 0.2, 0.08);
+    this.playTone(660, "sine", 0.15, 0.2, 0.16);
+    this.playTone(880, "sine", 0.12, 0.2, 0.24);
+  }
+  open()    {
+    this.playTone(392, "sine", 0.08, 0.15, 0);
+    this.playTone(523, "sine", 0.1,  0.15, 0.07);
+  }
+  swipe()   { this.playTone(330, "sine", 0.1, 0.1); }
+}
+
+export const sfx = new SoundEngine();
+
+// ─── Loading Screen ──────────────────────────────────────────
 function LoadingScreen({ onDone }: { onDone: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [phase, setPhase]       = useState(0);
+
+  const PHASES = ["تحميل الموارد...", "بناء الواجهة...", "جاهز! 🚀"];
+
   useEffect(() => {
-    const t = setTimeout(onDone, 2000);
-    return () => clearTimeout(t);
+    // Progress animation
+    const steps = [
+      { target: 30,  delay: 0    },
+      { target: 65,  delay: 400  },
+      { target: 88,  delay: 900  },
+      { target: 100, delay: 1400 },
+    ];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    steps.forEach(({ target, delay }) => {
+      timers.push(setTimeout(() => setProgress(target), delay));
+    });
+
+    // Phase text
+    timers.push(setTimeout(() => setPhase(1), 500));
+    timers.push(setTimeout(() => setPhase(2), 1200));
+    timers.push(setTimeout(() => onDone(),    1800));
+
+    // Play startup sound
+    setTimeout(() => sfx.open(), 300);
+
+    return () => timers.forEach(clearTimeout);
   }, [onDone]);
+
+  const particles = Array.from({ length: 20 }, (_, i) => ({
+    x: (i * 17 + 7) % 100,
+    y: (i * 23 + 5) % 100,
+    size: 1 + (i % 3),
+    delay: i * 0.08,
+    dur: 1.8 + (i % 4) * 0.4,
+  }));
+
   return (
     <motion.div
       initial={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.5 }}
+      exit={{ opacity: 0, scale: 1.05 }}
+      transition={{ duration: 0.6, ease: "easeInOut" }}
       className="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-[#06060f] overflow-hidden"
     >
-      <div className="absolute inset-0">
-        {[...Array(15)].map((_, i) => (
-          <motion.div key={i} className="absolute w-1 h-1 rounded-full bg-purple-500/40"
-            style={{ left: `${(i * 7 + 5) % 100}%`, top: `${(i * 13 + 10) % 100}%` }}
-            animate={{ y: [-15, 15], opacity: [0.2, 0.7, 0.2] }}
-            transition={{ duration: 2 + (i % 3), repeat: Infinity, delay: i * 0.15 }}
-          />
-        ))}
+      {/* Ambient background */}
+      <div className="absolute inset-0 pointer-events-none">
+        <motion.div
+          className="absolute top-1/4 left-1/3 w-96 h-96 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(168,85,247,0.12) 0%, transparent 70%)" }}
+          animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0.8, 0.5] }}
+          transition={{ duration: 3, repeat: Infinity }}
+        />
+        <motion.div
+          className="absolute bottom-1/4 right-1/3 w-72 h-72 rounded-full"
+          style={{ background: "radial-gradient(circle, rgba(236,72,153,0.1) 0%, transparent 70%)" }}
+          animate={{ scale: [1.2, 1, 1.2], opacity: [0.4, 0.7, 0.4] }}
+          transition={{ duration: 2.5, repeat: Infinity }}
+        />
       </div>
-      <div className="absolute w-64 h-64 rounded-full border border-purple-500/10 animate-pulse" />
-      <motion.div initial={{ scale: 0, rotate: -180 }} animate={{ scale: 1, rotate: 0 }}
-        transition={{ type: "spring", damping: 15, stiffness: 200, delay: 0.1 }}
-        className="relative mb-5">
-        <div className="absolute inset-0 bg-purple-500 blur-2xl opacity-40 scale-150" />
-        <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-purple-600 to-pink-600 flex items-center justify-center shadow-[0_0_50px_rgba(168,85,247,0.6)]">
-          <Gamepad2 className="w-10 h-10 text-white" />
+
+      {/* Particles */}
+      {particles.map((p, i) => (
+        <motion.div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            left:   `${p.x}%`,
+            top:    `${p.y}%`,
+            width:  p.size,
+            height: p.size,
+            background: i % 3 === 0 ? "#a855f7" : i % 3 === 1 ? "#ec4899" : "#818cf8",
+          }}
+          animate={{ y: [-20, 20, -20], opacity: [0.1, 0.6, 0.1], scale: [0.8, 1.4, 0.8] }}
+          transition={{ duration: p.dur, repeat: Infinity, delay: p.delay, ease: "easeInOut" }}
+        />
+      ))}
+
+      {/* Rotating rings */}
+      <div className="absolute">
+        <motion.div
+          className="w-48 h-48 rounded-full border border-purple-500/15"
+          animate={{ rotate: 360 }}
+          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+        />
+        <motion.div
+          className="absolute inset-4 rounded-full border border-pink-500/10"
+          animate={{ rotate: -360 }}
+          transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+        />
+      </div>
+
+      {/* Logo */}
+      <motion.div
+        initial={{ scale: 0, rotate: -180, opacity: 0 }}
+        animate={{ scale: 1, rotate: 0, opacity: 1 }}
+        transition={{ type: "spring", damping: 14, stiffness: 180, delay: 0.1 }}
+        className="relative mb-7 z-10"
+      >
+        <motion.div
+          className="absolute inset-0 rounded-3xl blur-2xl"
+          style={{ background: "linear-gradient(135deg, rgba(168,85,247,0.7), rgba(236,72,153,0.7))" }}
+          animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0.9, 0.5] }}
+          transition={{ duration: 2, repeat: Infinity }}
+        />
+        <div className="relative w-24 h-24 rounded-3xl flex items-center justify-center shadow-[0_0_60px_rgba(168,85,247,0.7)]"
+          style={{ background: "linear-gradient(135deg, #7c3aed, #ec4899)" }}>
+          <Gamepad2 className="w-12 h-12 text-white drop-shadow" />
+
+          {/* Orbiting element */}
+          <motion.div
+            className="absolute w-4 h-4 rounded-full bg-yellow-400 shadow-[0_0_10px_rgba(250,204,21,0.8)]"
+            style={{ top: -6, right: -6 }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+          />
         </div>
       </motion.div>
-      <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="text-center">
-        <h1 className="text-3xl font-black text-white mb-1">Streamer<span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-400">Clip</span>Hub</h1>
-        <p className="text-white/40 text-sm">جاري التحميل...</p>
+
+      {/* Title */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.35 }}
+        className="text-center z-10 mb-8"
+      >
+        <h1 className="text-4xl font-black text-white mb-1.5 tracking-tight">
+          Streamer
+          <motion.span
+            className="text-transparent bg-clip-text"
+            style={{ backgroundImage: "linear-gradient(to right, #a855f7, #ec4899, #a855f7)", backgroundSize: "200%" }}
+            animate={{ backgroundPosition: ["0%", "100%", "0%"] }}
+            transition={{ duration: 3, repeat: Infinity }}
+          >
+            Clip
+          </motion.span>
+          Hub
+        </h1>
+        <motion.p
+          className="text-white/50 text-sm font-medium"
+          animate={{ opacity: [0.4, 0.8, 0.4] }}
+          transition={{ duration: 1.5, repeat: Infinity }}
+        >
+          {PHASES[phase]}
+        </motion.p>
       </motion.div>
-      <motion.div className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-purple-600 via-pink-500 to-purple-600"
-        initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ duration: 1.8, ease: "easeInOut" }} />
+
+      {/* Progress bar */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="z-10 w-52"
+      >
+        <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full rounded-full"
+            style={{ background: "linear-gradient(to right, #7c3aed, #ec4899)" }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.4, ease: "easeOut" }}
+          />
+        </div>
+        <div className="flex justify-between mt-1.5">
+          <span className="text-white/20 text-[10px] font-mono">{progress}%</span>
+          <Zap className="w-3 h-3 text-purple-500/50" />
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
 
+// ─── Identity Wall ─────────────────────────────────────────────
 function IdentityWall({ onDone }: { onDone: () => void }) {
   const { setIdentity } = useIdentity();
   const [name, setName] = useState("");
@@ -69,14 +256,15 @@ function IdentityWall({ onDone }: { onDone: () => void }) {
     if (!file.type.startsWith("image/")) { setError("يجب أن يكون ملف صورة"); return; }
     if (file.size > 3 * 1024 * 1024) { setError("الصورة أكبر من 3MB"); return; }
     const reader = new FileReader();
-    reader.onload = e => { setAvatar(e.target?.result as string); setError(""); };
+    reader.onload = e => { setAvatar(e.target?.result as string); setError(""); sfx.click(); };
     reader.readAsDataURL(file);
   };
 
   const save = async () => {
     const n = name.trim();
-    if (n.length < 2) { setError("الاسم يجب أن يكون حرفين على الأقل"); return; }
+    if (n.length < 2) { setError("الاسم يجب أن يكون حرفين على الأقل"); sfx.error(); return; }
     setSaving(true);
+    sfx.success();
     setIdentity({ name: n, customAvatar: avatar });
     try { localStorage.setItem("sc_identity_done", "1"); } catch {}
     await new Promise(r => setTimeout(r, 350));
@@ -105,7 +293,7 @@ function IdentityWall({ onDone }: { onDone: () => void }) {
           </div>
 
           <div className="flex justify-center mb-5">
-            <button onClick={() => fileInputRef.current?.click()} className="relative group">
+            <button onClick={() => { fileInputRef.current?.click(); sfx.click(); }} className="relative group">
               <div className="w-20 h-20 rounded-2xl flex items-center justify-center text-2xl font-black text-white overflow-hidden border-2 border-white/10 group-hover:border-purple-500/60 transition-all"
                 style={{ background: avatar ? "transparent" : `hsl(${avatarHue},55%,32%)` }}>
                 {avatar ? <img src={avatar} alt="" className="w-full h-full object-cover" /> : (name[0]?.toUpperCase() || "؟")}
@@ -137,22 +325,35 @@ function IdentityWall({ onDone }: { onDone: () => void }) {
   );
 }
 
+// ─── Admin Route ──────────────────────────────────────────────
+// FIX: لا نعيد التوجيه هنا لأن Studio لديه check خاص بها
 function AdminRoute({ component: Component }: { component: React.ComponentType }) {
   const { data: user, isLoading } = useUser();
-  if (isLoading) return <div className="flex h-screen items-center justify-center bg-[#06060f]"><Loader2 className="w-8 h-8 animate-spin text-purple-500" /></div>;
-  if (!user || user.role !== "admin") return <Redirect to="/" />;
+  if (isLoading) return (
+    <div className="flex h-screen items-center justify-center bg-[#06060f]">
+      <div className="flex flex-col items-center gap-4">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+          className="w-10 h-10 rounded-full border-2 border-purple-500 border-t-transparent"
+        />
+        <p className="text-white/30 text-sm">التحقق من الصلاحيات...</p>
+      </div>
+    </div>
+  );
+  // Let the component handle unauthorized state to avoid double redirect
   return <Component />;
 }
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/submit" component={SubmitPage} />
-      <Route path="/dashboard" component={Dashboard} />
-      <Route path="/admin-login" component={AdminLogin} />
+      <Route path="/"              component={Home} />
+      <Route path="/submit"        component={SubmitPage} />
+      <Route path="/dashboard"     component={Dashboard} />
+      <Route path="/admin-login"   component={AdminLogin} />
       <Route path="/dream-artists" component={DreamArtists} />
-      <Route path="/draw" component={DrawPage} />
+      <Route path="/draw"          component={DrawPage} />
       <Route path="/studio"><AdminRoute component={Studio} /></Route>
       <Route component={NotFound} />
     </Switch>
@@ -163,21 +364,21 @@ function App() {
   const { identity } = useIdentity();
   const [phase, setPhase] = useState<"loading" | "identity" | "ready">("loading");
 
-  const afterLoading = () => {
+  const afterLoading = useCallback(() => {
     try {
       const done = localStorage.getItem("sc_identity_done");
       if (!identity && !done) { setPhase("identity"); }
       else { setPhase("ready"); }
     } catch { setPhase("ready"); }
-  };
+  }, [identity]);
 
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
         <AnimatePresence mode="wait">
-          {phase === "loading" && <LoadingScreen key="loading" onDone={afterLoading} />}
-          {phase === "identity" && <IdentityWall key="identity" onDone={() => setPhase("ready")} />}
+          {phase === "loading"   && <LoadingScreen  key="loading"  onDone={afterLoading} />}
+          {phase === "identity"  && <IdentityWall   key="identity" onDone={() => setPhase("ready")} />}
         </AnimatePresence>
         {phase === "ready" && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}>

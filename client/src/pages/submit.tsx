@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { sfx } from "@/App";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -46,6 +47,7 @@ export default function SubmitPage() {
   const [, setLocation]         = useLocation();
   const [metadata, setMetadata] = useState<any>(null);
   const [identityOpen, setIdentityOpen] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const createClip    = useCreateClip();
   const fetchMetadata = useClipMetadata();
   const { data: user } = useUser();
@@ -83,7 +85,10 @@ export default function SubmitPage() {
       submitterName: user ? user.username : (identity?.name ?? "زائر"),
       submitterAvatar,
     } as any);
-    setLocation("/");
+    // ✅ عرض شاشة النجاح بدل redirect مباشر
+    sfx.submit();
+    setSubmitted(true);
+    setTimeout(() => setLocation("/"), 5000);
   };
 
   const hasTimestamps = metadata && (metadata.startTime > 0 || metadata.endTime > 0);
@@ -93,6 +98,139 @@ export default function SubmitPage() {
   const identityAvatar = user?.avatarUrl || avatarUrl || null;
   const initial        = identityName[0]?.toUpperCase() ?? "؟";
   const bgColor        = identityName ? nameToColor(identityName) : "#7c3aed";
+
+  // ─── Success Screen ───────────────────────────────────────
+  if (submitted) {
+    return (
+      <Layout>
+        <div className="min-h-[80vh] flex items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: 40 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            transition={{ type: "spring", damping: 16, stiffness: 200 }}
+            className="relative max-w-md w-full"
+          >
+            {/* Glow effect */}
+            <div className="absolute inset-0 blur-3xl rounded-3xl opacity-30"
+              style={{ background: "linear-gradient(135deg, #7c3aed, #ec4899)" }} />
+
+            <div className="relative bg-[#0e0e1a] border border-white/8 rounded-3xl p-10 text-center shadow-[0_0_80px_rgba(168,85,247,0.15)]">
+
+              {/* Animated checkmark */}
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", damping: 10, stiffness: 200, delay: 0.2 }}
+                className="relative inline-flex mb-6"
+              >
+                {/* Rings */}
+                {[1, 2, 3].map(i => (
+                  <motion.div
+                    key={i}
+                    className="absolute inset-0 rounded-full border border-green-400/30"
+                    initial={{ scale: 0.5, opacity: 1 }}
+                    animate={{ scale: 2.5 + i * 0.8, opacity: 0 }}
+                    transition={{ duration: 1.5, delay: i * 0.2, repeat: Infinity, ease: "easeOut" }}
+                  />
+                ))}
+                <div className="relative w-24 h-24 rounded-full flex items-center justify-center"
+                  style={{ background: "linear-gradient(135deg, rgba(34,197,94,0.2), rgba(34,197,94,0.05))", border: "2px solid rgba(34,197,94,0.4)" }}>
+                  <CheckCircle2 className="w-12 h-12 text-green-400" />
+                </div>
+              </motion.div>
+
+              <motion.h2
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+                className="text-2xl font-black text-white mb-2"
+              >
+                تم الإرسال بنجاح! 🎉
+              </motion.h2>
+
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.55 }}
+                className="mb-6 space-y-3"
+              >
+                {/* Status banner */}
+                <div className="flex items-center gap-2.5 justify-center px-5 py-3 rounded-2xl"
+                  style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)" }}>
+                  <motion.div
+                    className="w-2.5 h-2.5 rounded-full bg-amber-400 flex-shrink-0"
+                    animate={{ opacity: [1, 0.3, 1] }}
+                    transition={{ duration: 1.2, repeat: Infinity }}
+                  />
+                  <p className="text-amber-300 font-bold text-sm">مشاركتك حاليًا في مجتمع الاقتراحات</p>
+                </div>
+
+                {/* Info */}
+                <div className="bg-white/3 border border-white/5 rounded-xl px-5 py-4 text-right space-y-2">
+                  <p className="text-white/60 text-sm flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] flex-shrink-0">1</span>
+                    كليبك قيد مراجعة الأدمن الآن
+                  </p>
+                  <p className="text-white/60 text-sm flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] flex-shrink-0">2</span>
+                    بعد الموافقة سيظهر في الصفحة الرئيسية
+                  </p>
+                  <p className="text-white/60 text-sm flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center text-[10px] flex-shrink-0">3</span>
+                    يمكن للمجتمع التصويت على كليبك ✨
+                  </p>
+                </div>
+              </motion.div>
+
+              {/* Clip title */}
+              {metadata?.title && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.7 }}
+                  className="mb-6 px-4 py-2.5 bg-white/4 border border-white/8 rounded-xl text-center"
+                >
+                  <p className="text-white/40 text-xs mb-0.5">الكليب المُرسَل</p>
+                  <p className="text-white font-semibold text-sm line-clamp-1">{metadata.title}</p>
+                </motion.div>
+              )}
+
+              {/* Progress to redirect */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.9 }}
+                className="space-y-2"
+              >
+                <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full"
+                    style={{ background: "linear-gradient(to right, #7c3aed, #ec4899)" }}
+                    initial={{ width: "0%" }}
+                    animate={{ width: "100%" }}
+                    transition={{ duration: 5, ease: "linear" }}
+                  />
+                </div>
+                <p className="text-white/25 text-xs">سيتم التحويل للرئيسية خلال ثوانٍ...</p>
+              </motion.div>
+
+              <motion.button
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setLocation("/")}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 1.1 }}
+                className="mt-5 w-full py-3 rounded-xl font-bold text-sm text-white transition-all"
+                style={{ background: "linear-gradient(135deg, #7c3aed, #ec4899)" }}
+              >
+                العودة للرئيسية الآن
+              </motion.button>
+            </div>
+          </motion.div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>

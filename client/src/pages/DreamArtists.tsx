@@ -38,7 +38,11 @@ interface RatingStats {
 function useArtworks(status = "approved") {
   return useQuery<Artwork[]>({
     queryKey: ["/api/artworks", status],
-    queryFn: () => fetch(`/api/artworks?status=${status}`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/artworks?status=${status}`);
+      if (!r.ok) throw new Error(`Failed to load artworks: ${r.status}`);
+      return r.json();
+    },
     staleTime: 0, refetchOnMount: true,
   });
 }
@@ -50,14 +54,22 @@ function useArtworkAction() {
       if (action === "delete") return fetch(`/api/artworks/${id}`, { method: "DELETE" });
       return fetch(`/api/artworks/${id}/status`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: action }) });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/artworks"] }),
+    onSuccess: () => {
+      // Invalidate any artworks list and related ratings so UI refreshes.
+      qc.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && String(q.queryKey[0]) === "/api/artworks" });
+      qc.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && String(q.queryKey[0]) === "/api/artworks/ratings" });
+    },
   });
 }
 
 function useRatingStats(artworkId: number | null) {
   return useQuery<RatingStats>({
     queryKey: ["/api/artworks/ratings", artworkId],
-    queryFn: () => fetch(`/api/artworks/${artworkId}/ratings`).then(r => r.json()),
+    queryFn: async () => {
+      const r = await fetch(`/api/artworks/${artworkId}/ratings`);
+      if (!r.ok) throw new Error(`Failed to load ratings: ${r.status}`);
+      return r.json();
+    },
     enabled: artworkId !== null, staleTime: 30_000,
   });
 }
@@ -66,8 +78,11 @@ function useSubmitRating() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, data }: { id: number; data: Record<string, any> }) =>
-      fetch(`/api/artworks/${id}/ratings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(r => r.json()),
-    onSuccess: (_d, { id }) => qc.invalidateQueries({ queryKey: ["/api/artworks/ratings", id] }),
+      fetch(`/api/artworks/${id}/ratings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }).then(async r => {
+        if (!r.ok) throw new Error(`Failed to submit rating: ${r.status}`);
+        return r.json();
+      }),
+    onSuccess: (_d, { id }) => qc.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && String(q.queryKey[0]) === "/api/artworks/ratings" && q.queryKey[1] === id }),
   });
 }
 

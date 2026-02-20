@@ -88,6 +88,11 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // In-memory fallback for artworks when no DB is configured
+  const inMemoryArtworks: Array<any> = [];
+  let inMemoryArtworkId = 1;
+  // artworkId -> Map<voterKey, rating>
+  const inMemoryArtworkRatings: Map<number, Map<string, any>> = new Map();
   const isProd = process.env.NODE_ENV === "production";
   const publicUrl = process.env.PUBLIC_URL || "";
   const cookieSecure = isProd || publicUrl.startsWith("https://");
@@ -447,7 +452,14 @@ export async function registerRoutes(
     if (status !== "approved" && (!req.isAuthenticated() || (req.user as any).role !== "admin")) {
       return res.status(403).json({ message: "Forbidden" });
     }
-    if (!pool) return res.json([]);
+    // If no DB, serve from in-memory store
+    if (!pool) {
+      const list = inMemoryArtworks
+        .filter(a => a.status === status)
+        .slice()
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return res.json(list);
+    }
     const c = await pool.connect();
     try {
       const r = await c.query(
@@ -466,7 +478,20 @@ export async function registerRoutes(
     if (!imageData || !imageData.startsWith("data:image")) {
       return res.status(400).json({ message: "Invalid image data" });
     }
-    if (!pool) return res.status(500).json({ message: "No DB" });
+    // If no DB, store in-memory for development/demo
+    if (!pool) {
+      const id = inMemoryArtworkId++;
+      const row = {
+        id,
+        imageData,
+        artistName: (artistName || "زائر").slice(0, 30),
+        artistAvatar: artistAvatar || null,
+        status: "pending",
+        createdAt: new Date().toISOString(),
+      };
+      inMemoryArtworks.push(row);
+      return res.status(201).json(row);
+    }
     const c = await pool.connect();
     try {
       const r = await c.query(
@@ -491,7 +516,12 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     const { status } = req.body;
     if (!["approved","rejected","pending"].includes(status)) return res.status(400).json({ message: "Invalid status" });
-    if (!pool) return res.status(500).json({ message: "No DB" });
+    if (!pool) {
+      const idx = inMemoryArtworks.findIndex(a => a.id === id);
+      if (idx === -1) return res.status(404).json({ message: "Not found" });
+      inMemoryArtworks[idx].status = status;
+      return res.json({ success: true });
+    }
     const c = await pool.connect();
     try {
       await c.query(`UPDATE artworks SET status = $1 WHERE id = $2`, [status, id]);
@@ -504,7 +534,13 @@ export async function registerRoutes(
     if (!req.isAuthenticated() || (req.user as any).role !== "admin")
       return res.status(403).json({ message: "Forbidden" });
     const id = parseInt(req.params.id);
-    if (!pool) return res.status(500).json({ message: "No DB" });
+    if (!pool) {
+      const idx = inMemoryArtworks.findIndex(a => a.id === id);
+      if (idx === -1) return res.status(404).json({ message: "Not found" });
+      inMemoryArtworks.splice(idx, 1);
+      inMemoryArtworkRatings.delete(id);
+      return res.json({ success: true });
+    }
     const c = await pool.connect();
     try {
       await c.query(`DELETE FROM artworks WHERE id = $1`, [id]);
@@ -516,7 +552,15 @@ export async function registerRoutes(
   // GET /api/artworks/:id/ratings
   app.get("/api/artworks/:id/ratings", async (req, res) => {
     const id = parseInt(req.params.id);
-    if (!pool) return res.json({ avg: 0, count: 0, breakdown: [0,0,0,0,0] });
+    if (!pool) {
+      const map = inMemoryArtworkRatings.get(id) || new Map();
+      const values = Array.from(map.values()).map(v => v.overall);
+      const count = values.length;
+      const avg = count ? (values.reduce((a, b) => a + b, 0) / count) : 0;
+      const breakdown = [0,0,0,0,0];
+      for (const v of values) breakdown[v-1]++;
+      return res.json({ avg: Math.round((avg)*10)/10 || 0, count, breakdown });
+    }
     const c = await pool.connect();
     try {
       const r = await c.query(
@@ -538,10 +582,16 @@ export async function registerRoutes(
     const id = parseInt(req.params.id);
     const { overall, quality, speed, communication, value, comment } = req.body;
     if (!overall || overall < 1 || overall > 5) return res.status(400).json({ message: "تقييم غير صالح" });
-    if (!pool) return res.status(500).json({ message: "No DB" });
+    // allow ratings in-memory when no DB for dev
     const ip = (req.headers["x-forwarded-for"] as string)?.split(",")[0] || req.socket.remoteAddress || "anon";
     const userId = req.isAuthenticated() ? (req.user as any).id : null;
     const voterKey = userId ? `u:${userId}` : `ip:${ip}`;
+    if (!pool) {
+      let map = inMemoryArtworkRatings.get(id);
+      if (!map) { map = new Map(); inMemoryArtworkRatings.set(id, map); }
+      map.set(voterKey, { overall, quality: quality||null, speed: speed||null, communication: communication||null, value: value||null, comment: (comment||"").slice(0,500)||null, createdAt: new Date().toISOString() });
+      return res.json({ success: true });
+    }
     const c = await pool.connect();
     try {
       await c.query(

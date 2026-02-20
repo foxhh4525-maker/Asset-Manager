@@ -448,8 +448,8 @@ export async function registerRoutes(
   // GET /api/artworks?status=approved|pending|rejected
   app.get("/api/artworks", async (req, res) => {
     const status = (req.query.status as string) || "approved";
-    // الأدمن فقط يرى الانتظار والمرفوض
-    if (status !== "approved" && (!req.isAuthenticated() || (req.user as any).role !== "admin")) {
+    // المرفوض للأدمن فقط — الانتظار مرئي للجميع (مجتمع المقترحات)
+    if (status === "rejected" && (!req.isAuthenticated() || (req.user as any).role !== "admin")) {
       return res.status(403).json({ message: "Forbidden" });
     }
     // If no DB, serve from in-memory store

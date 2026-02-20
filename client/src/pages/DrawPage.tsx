@@ -328,9 +328,10 @@ export default function DrawPage() {
             return old;
           }
         );
-        // ✅ invalidate لضمان جلب أحدث البيانات عند mount الصفحة
+        // ✅ invalidate لضمان جلب أحدث البيانات
         queryClient.invalidateQueries({ queryKey: ["/api/artworks"] });
-        setTimeout(() => setLocation("/dream-artists"), 5000);
+        // الرسمة تذهب لمجتمع المقترحات أولاً (pending) — وبعد موافقة الأدمن تظهر في رسامين دريم
+        setTimeout(() => setLocation("/"), 5000);
       }
     } catch {}
     setSubmitting(false);

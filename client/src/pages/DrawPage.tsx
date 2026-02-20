@@ -1,5 +1,5 @@
 import { useRef, useState, useEffect, useCallback } from "react";
-import { sfx } from "@/App";
+import { sfx } from "@/lib/sounds";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import { Layout } from "@/components/layout";

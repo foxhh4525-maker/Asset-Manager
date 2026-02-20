@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { sfx } from "@/App";
+import { sfx } from "@/lib/sounds";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";

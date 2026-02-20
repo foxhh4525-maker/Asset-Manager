@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { sfx } from "@/App";
+import { sfx } from "@/lib/sounds";
 import { motion, AnimatePresence } from "framer-motion";
 import { Play, ThumbsUp, ThumbsDown, Clock, Trash2, Share2, Check, ExternalLink } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";

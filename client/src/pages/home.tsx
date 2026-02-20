@@ -801,18 +801,53 @@ function CommunitySection({ section, isAdmin, sortBy }: { section: typeof SECTIO
     <div className="text-center py-24 text-muted-foreground">لا توجد مشاركات حالياً</div>
   );
 
+  const [playingClip, setPlayingClip] = useState<any>(null);
+  const [viewingArt, setViewingArt] = useState<any>(null);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-      {items.map((it) => (
-        <div key={it.id}>
-          {it.type === "clip" ? (
-            <ClipCard clip={it.payload} onPlay={() => { /* open handled in parent if needed */ }} isAdmin={isAdmin} />
-          ) : (
-            <ArtworkCard art={it.payload} onClick={() => { /* placeholder */ }} />
-          )}
-        </div>
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        {items.map((it) => (
+          <div key={it.id}>
+            {it.type === "clip" ? (
+              <ClipCard clip={it.payload} onPlay={() => setPlayingClip(it.payload)} isAdmin={isAdmin} />
+            ) : (
+              <ArtworkCard art={it.payload} onClick={() => setViewingArt(it.payload)} />
+            )}
+          </div>
+        ))}
+      </div>
+      {/* Player for clips */}
+      <AnimatePresence>
+        {playingClip && <GhostPlayer clip={playingClip} onClose={() => setPlayingClip(null)} />}
+      </AnimatePresence>
+      {/* Viewer for artworks */}
+      <AnimatePresence>
+        {viewingArt && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/95 backdrop-blur-xl flex items-center justify-center p-4"
+            onClick={() => setViewingArt(null)}>
+            <motion.div initial={{ scale: 0.85 }} animate={{ scale: 1 }} exit={{ scale: 0.85 }}
+              className="max-w-2xl w-full bg-[#12121e] rounded-2xl overflow-hidden border border-white/10 shadow-2xl"
+              onClick={e => e.stopPropagation()}>
+              <img src={viewingArt.imageData} alt={viewingArt.artistName} className="w-full object-contain max-h-[65vh]" />
+              <div className="p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-white font-bold">{viewingArt.artistName}</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    <span className="text-amber-300 text-xs">قيد المراجعة</span>
+                  </div>
+                </div>
+                <button onClick={() => setViewingArt(null)} className="w-9 h-9 rounded-full bg-white/5 flex items-center justify-center text-white/50 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

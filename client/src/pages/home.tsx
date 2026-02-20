@@ -773,6 +773,9 @@ function ClipsSection({ section, status, isAdmin, sortBy, initialClip }: {
 function CommunitySection({ section, isAdmin, sortBy }: { section: typeof SECTIONS[number]; isAdmin: boolean; sortBy: "new" | "top" }) {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  // ✅ FIX: نقل useState للأعلى قبل أي return مشروط (قواعد React Hooks)
+  const [playingClip, setPlayingClip] = useState<any>(null);
+  const [viewingArt, setViewingArt] = useState<any>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -800,9 +803,6 @@ function CommunitySection({ section, isAdmin, sortBy }: { section: typeof SECTIO
   if (items.length === 0) return (
     <div className="text-center py-24 text-muted-foreground">لا توجد مشاركات حالياً</div>
   );
-
-  const [playingClip, setPlayingClip] = useState<any>(null);
-  const [viewingArt, setViewingArt] = useState<any>(null);
 
   return (
     <>

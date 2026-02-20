@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Layout } from "@/components/layout";
 import { ClipCard } from "@/components/clip-card";
 import { useClips } from "@/hooks/use-clips";

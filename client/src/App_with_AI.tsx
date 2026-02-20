@@ -18,6 +18,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { sfx } from "@/lib/sounds";
+import { AIAssistant } from "@/components/AIAssistant";
 
 // ─── Loading Screen ──────────────────────────────────────────
 function LoadingScreen({ onDone }: { onDone: () => void }) {
@@ -331,6 +332,7 @@ function App() {
         {phase === "ready" && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}>
             <Router />
+            <AIAssistant />
           </motion.div>
         )}
       </TooltipProvider>

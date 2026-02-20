@@ -17,59 +17,7 @@ import { useIdentity } from "@/hooks/use-identity";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
-// ─── Sound System ─────────────────────────────────────────────
-class SoundEngine {
-  private ctx: AudioContext | null = null;
-
-  private getCtx(): AudioContext {
-    if (!this.ctx) this.ctx = new AudioContext();
-    if (this.ctx.state === "suspended") this.ctx.resume();
-    return this.ctx;
-  }
-
-  private playTone(freq: number, type: OscillatorType, duration: number, vol = 0.3, delay = 0) {
-    try {
-      const ctx  = this.getCtx();
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type      = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
-      gain.gain.setValueAtTime(0, ctx.currentTime + delay);
-      gain.gain.linearRampToValueAtTime(vol, ctx.currentTime + delay + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + duration);
-      osc.start(ctx.currentTime + delay);
-      osc.stop(ctx.currentTime + delay + duration);
-    } catch {}
-  }
-
-  // 🎵 أصوات الموقع
-  click()   { this.playTone(440, "sine", 0.08, 0.15); }
-  hover()   { this.playTone(660, "sine", 0.06, 0.07); }
-  success() {
-    this.playTone(523, "sine", 0.12, 0.25, 0);
-    this.playTone(659, "sine", 0.12, 0.25, 0.12);
-    this.playTone(784, "sine", 0.18, 0.25, 0.24);
-  }
-  error()   {
-    this.playTone(300, "sawtooth", 0.15, 0.2, 0);
-    this.playTone(220, "sawtooth", 0.15, 0.2, 0.12);
-  }
-  submit()  {
-    this.playTone(440, "sine", 0.1, 0.2, 0);
-    this.playTone(550, "sine", 0.1, 0.2, 0.08);
-    this.playTone(660, "sine", 0.15, 0.2, 0.16);
-    this.playTone(880, "sine", 0.12, 0.2, 0.24);
-  }
-  open()    {
-    this.playTone(392, "sine", 0.08, 0.15, 0);
-    this.playTone(523, "sine", 0.1,  0.15, 0.07);
-  }
-  swipe()   { this.playTone(330, "sine", 0.1, 0.1); }
-}
-
-export const sfx = new SoundEngine();
+import { sfx } from "@/lib/sounds";
 
 // ─── Loading Screen ──────────────────────────────────────────
 function LoadingScreen({ onDone }: { onDone: () => void }) {
